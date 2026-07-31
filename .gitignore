@@ -1,0 +1,26 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Environment
+.env
+
+# Build
+dist/
+
+# Logs
+*.log
+
+# Models
+*.pkl
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
