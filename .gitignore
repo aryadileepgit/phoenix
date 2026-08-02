@@ -2,24 +2,23 @@
 venv/
 __pycache__/
 *.pyc
+.env
 
 # Node
 node_modules/
-
-# Environment
-.env
-
-# Build
 dist/
 
-# Logs
-*.log
+# Uploaded/generated files
+backend/storage/raw/
+backend/storage/clean/
+backend/storage/preprocessed/
+backend/storage/smote/
+backend/storage/features/
+backend/storage/training/
 
-# Models
-*.pkl
-
-# VSCode
+# IDE
 .vscode/
+.idea/
 
 # OS
 .DS_Store
