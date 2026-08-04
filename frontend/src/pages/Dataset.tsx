@@ -21,8 +21,6 @@ import { PreprocessingCard } from "../components/dataset/PreprocessingCard";
 import { SmoteCard } from "../components/dataset/SmoteCard";
 import { FeatureEngineeringCard } from "../components/dataset/FeatureEngineeringCard";
 import { TrainTestSplitCard } from "../components/dataset/TrainTestSplitCard";
-import { DatasetPreview } from "../components/dataset/DatasetPreview";
-import { DatasetHistory } from "../components/dataset/DatasetHistory";
 import { StorageFlow } from "../components/dataset/StorageFlow";
 import { ActivityTimeline, type ActivityEntry } from "../components/dataset/ActivityTimeline";
 import { FooterSummary } from "../components/dataset/FooterSummary";
@@ -36,19 +34,15 @@ import {
   applySmote,
   generateFeatures,
   splitTrainTest,
-  getDatasetHistory,
-  getDatasetById,
 } from "../services/datasetService";
 import type {
   DatasetInfo,
-  DatasetPreviewRow,
   ValidationReport,
   CleaningReport,
   PreprocessingReport,
   SmoteReport,
   FeatureEngineeringReport,
   TrainTestSplitReport,
-  DatasetHistoryItem,
 } from "../types/dataset";
 
 interface DatasetProps {
@@ -66,7 +60,6 @@ export function Dataset({ onLogout }: DatasetProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dataset, setDataset] = useState<DatasetInfo | null>(null);
   const [validation, setValidation] = useState<ValidationReport | null>(null);
-  const [previewRows, setPreviewRows] = useState<DatasetPreviewRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -86,29 +79,14 @@ export function Dataset({ onLogout }: DatasetProps) {
   const [splitLoading, setSplitLoading] = useState(false);
   const [splitReport, setSplitReport] = useState<TrainTestSplitReport | null>(null);
 
-  // History
-  const [history, setHistory] = useState<DatasetHistoryItem[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-
   // Activity log — real entries pushed as each pipeline action actually completes.
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const logActivity = useCallback((label: string) => {
     setActivity((prev) => [...prev, { time: timeNow(), label }]);
   }, []);
 
-  const loadHistory = useCallback(() => {
-    setHistoryLoading(true);
-    setHistoryError(null);
-    getDatasetHistory()
-      .then(setHistory)
-      .catch((err) => setHistoryError(err instanceof Error ? err.message : "Failed to load history."))
-      .finally(() => setHistoryLoading(false));
-  }, []);
-
-  useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+  // Track history for dataset processing count
+  const [history, setHistory] = useState<{ id: string; name: string }[]>([]);
 
   // -----------------------------
   // Upload Dataset
@@ -128,23 +106,40 @@ export function Dataset({ onLogout }: DatasetProps) {
     setSuccess(false);
 
     try {
-      const response = await uploadDataset(selectedFile, setUploadProgress);
+      const response = await uploadDataset(
+        selectedFile,
+        setUploadProgress
+      );
 
+      // IMPORTANT
       setDataset(response.dataset);
-      setValidation(response.dataset.validation ?? null);
-      setPreviewRows(response.preview ?? []);
-      setSuccess(true);
-      setSelectedFile(null);
 
-      // Reset downstream pipeline state for the newly uploaded dataset.
+      // Validation
+      setValidation(response.dataset.validation ?? null);
+
+      setSuccess(true);
+      
+      // Add to history
+      setHistory(prev => [...prev, { 
+        id: response.dataset.id, 
+        name: response.dataset.datasetName ?? response.dataset.originalFilename ?? "Dataset" 
+      }]);
+
+      // Reset pipeline
       setCleaningReport(null);
       setPreprocessingReport(null);
       setSmoteReport(null);
       setFeatureReport(null);
       setSplitReport(null);
 
-      logActivity(`Uploaded dataset "${response.dataset.datasetName ?? response.dataset.originalFilename ?? "dataset"}"`);
-      const statusUpper = safeUpper(response.dataset.validation?.validationStatus);
+      logActivity(
+        `Uploaded dataset "${response.dataset.datasetName ?? response.dataset.originalFilename ?? "Dataset"}"`
+      );
+
+      const statusUpper = safeUpper(
+        response.dataset.validation?.validationStatus
+      );
+
       logActivity(
         statusUpper.length === 0
           ? "Validation completed"
@@ -153,11 +148,11 @@ export function Dataset({ onLogout }: DatasetProps) {
           : "Validation completed — FAILED"
       );
 
-      loadHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Dataset upload failed.");
+      setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setUploading(false);
+      setSelectedFile(null);
     }
   };
 
@@ -241,38 +236,14 @@ export function Dataset({ onLogout }: DatasetProps) {
     setSplitLoading(true);
     setError(null);
     try {
-     const response = await splitTrainTest(dataset.id);
-
-setSplitReport(response.training);
-
-logActivity("Training dataset created");
+      const response = await splitTrainTest(dataset.id);
+      setSplitReport(response.training);
+      logActivity("Training dataset created");
       logActivity("Train/Test split completed");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Train/Test split failed.");
     } finally {
       setSplitLoading(false);
-    }
-  };
-
-  // -----------------------------
-  // Select a dataset from history
-  // -----------------------------
-  const handleSelectHistory = async (id: string) => {
-    try {
-      const info = await getDatasetById(id);
-      setDataset(info);
-      setValidation(info.validation ?? null);
-      setPreviewRows([]);
-      setCleaningReport(null);
-      setPreprocessingReport(null);
-      setSmoteReport(null);
-      setFeatureReport(null);
-      setSplitReport(null);
-      setSuccess(false);
-      setError(null);
-      logActivity(`Loaded dataset "${info.datasetName}" from history`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load dataset.");
     }
   };
 
@@ -314,6 +285,14 @@ logActivity("Training dataset created");
 
   const currentStageLabel = stages.find((s) => s.status !== "completed")?.label ?? "Ready for Training";
   const lastUpdated = activity.length > 0 ? activity[activity.length - 1].time : "—";
+
+  // -----------------------------
+  // Proceed handler
+  // -----------------------------
+  const handleProceed = () => {
+    logActivity("Requested to proceed to Model Training");
+    // You can add navigation logic here
+  };
 
   return (
     <AppShell onLogout={onLogout}>
@@ -383,12 +362,6 @@ logActivity("Training dataset created");
         split={splitReport}
       />
 
-      {/* Preview */}
-      <DatasetPreview rows={previewRows} />
-
-      {/* History */}
-      <DatasetHistory items={history} loading={historyLoading} error={historyError} onSelect={handleSelectHistory} />
-
       {/* Storage flow */}
       <StorageFlow activeIndex={storageActiveIndex} />
 
@@ -400,7 +373,7 @@ logActivity("Training dataset created");
         completionPct={completionPct}
         datasetsProcessed={history.length}
         ready={!!splitReport}
-        onProceed={() => logActivity("Requested to proceed to Model Training")}
+        onProceed={handleProceed}
       />
     </AppShell>
   );

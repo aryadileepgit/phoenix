@@ -102,10 +102,10 @@ export async function uploadDataset(
       },
     });
 
-    return {
-      dataset: normalizeDataset(response.data.dataset, file.size),
-      preview: [],
-    };
+   return {
+    dataset: normalizeDataset(response.data.dataset, file.size),
+    preview: response.data.preview ?? [],
+};
   } catch (err) {
     throw new Error(extractErrorMessage(err));
   }

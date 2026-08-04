@@ -104,6 +104,8 @@ export interface RawDatasetUploadResponse {
   message: string;
 
   dataset: RawDataset;
+
+  preview?: DatasetPreviewRow[];
 }
 
 /**
