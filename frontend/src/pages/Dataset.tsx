@@ -25,6 +25,7 @@ import { StorageFlow } from "../components/dataset/StorageFlow";
 import { ActivityTimeline, type ActivityEntry } from "../components/dataset/ActivityTimeline";
 import { FooterSummary } from "../components/dataset/FooterSummary";
 import { ReportsSummary } from "../components/dataset/ReportsSummary";
+import { DatasetHistory } from "../components/dataset/DatasetHistory";
 import { PipelineProgress, type Stage, type StageStatus } from "../components/dataset/PipelineProgress";
 import { safeUpper } from "../utils/format";
 import {
@@ -34,6 +35,8 @@ import {
   applySmote,
   generateFeatures,
   splitTrainTest,
+  getDatasetHistory,
+  getDatasetById,
 } from "../services/datasetService";
 import type {
   DatasetInfo,
@@ -43,6 +46,7 @@ import type {
   SmoteReport,
   FeatureEngineeringReport,
   TrainTestSplitReport,
+  DatasetHistoryItem,
 } from "../types/dataset";
 
 interface DatasetProps {
@@ -85,8 +89,27 @@ export function Dataset({ onLogout }: DatasetProps) {
     setActivity((prev) => [...prev, { time: timeNow(), label }]);
   }, []);
 
-  // Track history for dataset processing count
-  const [history, setHistory] = useState<{ id: string; name: string }[]>([]);
+  // Dataset history — backed by GET /dataset/history.
+  const [historyItems, setHistoryItems] = useState<DatasetHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const items = await getDatasetHistory();
+      setHistoryItems(items);
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : "Failed to load dataset history.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshHistory();
+  }, [refreshHistory]);
 
   // -----------------------------
   // Upload Dataset
@@ -118,12 +141,9 @@ export function Dataset({ onLogout }: DatasetProps) {
       setValidation(response.dataset.validation ?? null);
 
       setSuccess(true);
-      
-      // Add to history
-      setHistory(prev => [...prev, { 
-        id: response.dataset.id, 
-        name: response.dataset.datasetName ?? response.dataset.originalFilename ?? "Dataset" 
-      }]);
+
+      // Refresh history so the newly uploaded dataset appears in the table.
+      refreshHistory();
 
       // Reset pipeline
       setCleaningReport(null);
@@ -248,6 +268,36 @@ export function Dataset({ onLogout }: DatasetProps) {
   };
 
   // -----------------------------
+  // Select a dataset from history
+  // -----------------------------
+  const [historySelecting, setHistorySelecting] = useState(false);
+
+  const handleSelectHistory = async (id: string) => {
+    if (historySelecting || uploading) return;
+    setHistorySelecting(true);
+    setError(null);
+    try {
+      const loaded = await getDatasetById(id);
+      setDataset(loaded);
+      setValidation(loaded.validation ?? null);
+      setSuccess(true);
+
+      // A different dataset means the previous pipeline results no longer apply.
+      setCleaningReport(null);
+      setPreprocessingReport(null);
+      setSmoteReport(null);
+      setFeatureReport(null);
+      setSplitReport(null);
+
+      logActivity(`Loaded dataset "${loaded.datasetName ?? loaded.originalFilename ?? loaded.id}" from history`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load dataset.");
+    } finally {
+      setHistorySelecting(false);
+    }
+  };
+
+  // -----------------------------
   // Derived pipeline stage state
   // -----------------------------
   const statusFor = (loading: boolean, done: boolean): StageStatus =>
@@ -365,13 +415,21 @@ export function Dataset({ onLogout }: DatasetProps) {
       {/* Storage flow */}
       <StorageFlow activeIndex={storageActiveIndex} />
 
+      {/* Dataset history */}
+      <DatasetHistory
+        items={historyItems}
+        loading={historyLoading}
+        error={historyError}
+        onSelect={handleSelectHistory}
+      />
+
       {/* Activity timeline */}
       <ActivityTimeline entries={activity} />
 
       {/* Footer summary */}
       <FooterSummary
         completionPct={completionPct}
-        datasetsProcessed={history.length}
+        datasetsProcessed={historyItems.length}
         ready={!!splitReport}
         onProceed={handleProceed}
       />

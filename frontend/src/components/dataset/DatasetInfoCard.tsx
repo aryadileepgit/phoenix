@@ -25,10 +25,10 @@ export function DatasetInfoCard({ dataset }: DatasetInfoCardProps) {
   const items = [
     { icon: Database, label: "Dataset Name", value: dataset.datasetName },
     { icon: FileText, label: "Original Filename", value: dataset.originalFilename },
-    { icon: Rows3, label: "Rows", value: dataset.rows.toLocaleString() },
-    { icon: Columns3, label: "Columns", value: dataset.columns.toString() },
+    { icon: Rows3, label: "Rows", value: dataset.rows?.toLocaleString() ?? "—" },
+    { icon: Columns3, label: "Columns", value: dataset.columns?.toString() ?? "—" },
     { icon: BadgeCheck, label: "Upload Status", value: dataset.status },
-    { icon: Clock, label: "Upload Time", value: formatUploadTime(dataset.uploadTime) },
+    { icon: Clock, label: "Upload Time", value: dataset.uploadTime ? formatUploadTime(dataset.uploadTime) : "—" },
   ];
 
   return (

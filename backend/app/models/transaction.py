@@ -38,9 +38,9 @@ class Transaction(Base):
         nullable=False,
     )
 
-    sender: Mapped[str] = mapped_column(
+    sender: Mapped[str | None] = mapped_column(
         String(50),
-        nullable=False,
+        nullable=True,
     )
 
     sender_balance_before: Mapped[float] = mapped_column(
@@ -53,9 +53,9 @@ class Transaction(Base):
         nullable=False,
     )
 
-    receiver: Mapped[str] = mapped_column(
+    receiver: Mapped[str | None] = mapped_column(
         String(50),
-        nullable=False,
+        nullable=True,
     )
 
     receiver_balance_before: Mapped[float] = mapped_column(
@@ -68,8 +68,18 @@ class Transaction(Base):
         nullable=False,
     )
 
-    actual_label: Mapped[bool] = mapped_column(
+    actual_label: Mapped[bool | None] = mapped_column(
         Boolean,
+        nullable=True,
+    )
+
+    predicted_label: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+    )
+
+    fraud_probability: Mapped[float] = mapped_column(
+        Numeric(5, 4),
         nullable=False,
     )
 

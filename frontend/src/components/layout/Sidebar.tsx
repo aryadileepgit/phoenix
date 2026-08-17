@@ -24,8 +24,8 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "Datasets", icon: Database, path: "/dataset" },
-  { label: "Transactions", icon: ArrowLeftRight },
-  { label: "Fraud Detection", icon: ShieldAlert },
+  { label: "Transactions", icon: ArrowLeftRight, path: "/transactions" },
+  { label: "Fraud Detection", icon: ShieldAlert, path: "/fraud-detection" },
   { label: "Schema Evolution", icon: GitBranch },
   { label: "Concept Drift", icon: Activity },
   { label: "Adaptive Learning", icon: BrainCog },

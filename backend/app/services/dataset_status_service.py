@@ -115,6 +115,15 @@ def get_latest_dataset(db: Session):
             "status":
                 model_report.status,
 
+            "confusion_matrix":
+                model_report.confusion_matrix,
+
+            "roc_curve":
+                model_report.roc_curve,
+
+            "feature_importance":
+                model_report.feature_importance,
+
             "created_at":
                 model_report.created_at
         }

@@ -1,8 +1,7 @@
-import { motion } from "framer-motion";
 import { Layers, Plus, FileOutput } from "lucide-react";
 import { PipelineActionCard } from "./PipelineActionCard";
 import { StatTile } from "./StatTile";
-import { safeNumber, safeString, safeArray } from "../../utils/format";
+import { safeNumber, safeString } from "../../utils/format";
 import type { FeatureEngineeringReport } from "../../types/dataset";
 
 interface FeatureEngineeringCardProps {

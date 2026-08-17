@@ -9,6 +9,8 @@ from fastapi import (
 from sqlalchemy.orm import Session
 from uuid import UUID
 import traceback
+import io
+import pandas as pd
 from app.services.dataset_status_service import (
     get_latest_dataset,
     get_dataset_history
@@ -57,7 +59,8 @@ from app.services.model_training_service import (
 )
 
 from app.services.prediction_service import (
-    predict_transaction
+    predict_transaction,
+    predict_transactions_batch
 )
 
 
@@ -500,6 +503,73 @@ def predict_fraud(
 
         print(
             "====================================\n"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+
+# ==================================================
+# BATCH FRAUD PREDICTION (CSV UPLOAD)
+# ==================================================
+
+@router.post("/predict-batch/{dataset_id}")
+async def predict_fraud_batch(
+    dataset_id: UUID,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+
+    try:
+
+        if not file.filename or not file.filename.lower().endswith(".csv"):
+            raise HTTPException(
+                status_code=400,
+                detail="Only CSV files are supported."
+            )
+
+        contents = await file.read()
+
+        try:
+            df = pd.read_csv(io.BytesIO(contents))
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unable to parse CSV file: {str(e)}"
+            )
+
+        result = predict_transactions_batch(
+            dataset_id,
+            df,
+            db
+        )
+
+        return {
+
+            "message":
+                "Batch fraud prediction completed successfully.",
+
+            "result":
+                result
+        }
+
+    except HTTPException:
+
+        raise
+
+    except Exception as e:
+
+        print(
+            "\n========== BATCH PREDICTION ERROR =========="
+        )
+
+        traceback.print_exc()
+
+        print(
+            "============================================\n"
         )
 
         raise HTTPException(

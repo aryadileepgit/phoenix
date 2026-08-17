@@ -67,6 +67,33 @@ export interface DatasetUploadResponse {
 
 /**
  * -----------------------------
+ * Dataset History
+ * -----------------------------
+ *
+ * Shape returned by GET /dataset/history. Mirrors the columns already
+ * rendered by DatasetHistory.tsx.
+ */
+
+export interface DatasetHistoryItem {
+  id: string;
+
+  datasetName?: string;
+
+  uploadTime?: string;
+
+  status?: string;
+
+  rows?: number;
+
+  validationStatus?: string;
+
+  cleaningStatus?: string;
+
+  currentStage?: string;
+}
+
+/**
+ * -----------------------------
  * RAW Backend Response
  * -----------------------------
  */
@@ -224,7 +251,7 @@ export interface FeatureEngineeringResponse {
  * -----------------------------
  */
 
-export interface TrainTestReport {
+export interface TrainTestSplitReport {
   dataset_id?: string;
 
   training_rows?: number;
@@ -233,11 +260,13 @@ export interface TrainTestReport {
 
   total_features?: number;
 
+  output_folder?: string;
+
   status?: string;
 }
 
 export interface TrainTestSplitResponse {
   message?: string;
 
-  training: TrainTestReport;
+  training: TrainTestSplitReport;
 }

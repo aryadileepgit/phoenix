@@ -24,7 +24,7 @@ import type {
  * Override using VITE_API_BASE_URL in a .env file.
  * Defaults to the local FastAPI backend.
  */
-const API_BASE_URL =
+export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 /**
@@ -37,15 +37,37 @@ export const apiClient = axios.create({
 /**
  * Standard API error response structure.
  */
-interface ApiErrorPayload {
-  detail?: string;
+interface StructuredErrorDetail {
   message?: string;
+  missing_fields?: string[];
+  missing_features?: string[];
+  values?: string[];
+  value?: string;
+}
+
+interface ApiErrorPayload {
+  detail?: string | StructuredErrorDetail;
+  message?: string;
+}
+
+/** Flattens a structured FastAPI `detail` object into one readable line. */
+function formatStructuredDetail(detail: StructuredErrorDetail): string {
+  const parts = [detail.message ?? "Request failed."];
+
+  const list = detail.missing_fields ?? detail.missing_features ?? detail.values;
+  if (list && list.length > 0) {
+    parts.push(`(${list.join(", ")})`);
+  } else if (detail.value) {
+    parts.push(`(${detail.value})`);
+  }
+
+  return parts.join(" ");
 }
 
 /**
  * Extracts a readable error message from an Axios/API error.
  */
-function extractErrorMessage(err: unknown): string {
+export function extractErrorMessage(err: unknown): string {
   if (axios.isAxiosError(err)) {
     const axiosErr = err as AxiosError<ApiErrorPayload>;
 
@@ -53,7 +75,9 @@ function extractErrorMessage(err: unknown): string {
       const payload = axiosErr.response.data;
 
       if (payload?.detail) {
-        return payload.detail;
+        return typeof payload.detail === "string"
+          ? payload.detail
+          : formatStructuredDetail(payload.detail);
       }
 
       if (payload?.message) {

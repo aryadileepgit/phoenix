@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
+
 
 
 class ModelReport(Base):
@@ -61,6 +62,20 @@ class ModelReport(Base):
     test_rows: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
+    )
+    confusion_matrix: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
+    roc_curve: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+
+    feature_importance: Mapped[list | None] = mapped_column(
+        JSONB,
+        nullable=True,
     )
 
     model_path: Mapped[str] = mapped_column(

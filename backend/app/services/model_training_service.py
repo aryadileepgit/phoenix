@@ -123,25 +123,12 @@ def train_xgboost_model(dataset_id, db: Session):
     # --------------------------------------------------
 
     try:
-
-        X_train = pd.read_csv(
-            X_train_path
-        )
-
-        y_train = pd.read_csv(
-            y_train_path
-        ).squeeze()
-
-        X_test = pd.read_csv(
-            X_test_path
-        )
-
-        y_test = pd.read_csv(
-            y_test_path
-        ).squeeze()
+        X_train = pd.read_csv(X_train_path)
+        y_train = pd.read_csv(y_train_path).squeeze()
+        X_test = pd.read_csv(X_test_path)
+        y_test = pd.read_csv(y_test_path).squeeze()
 
     except Exception as e:
-
         raise HTTPException(
             status_code=500,
             detail=(
@@ -153,21 +140,7 @@ def train_xgboost_model(dataset_id, db: Session):
     # Validate row counts
     # --------------------------------------------------
 
-    print("\n========================================")
-    print("TRAINING DATA CHECK")
-    print("========================================")
-    print("X_train rows:", len(X_train))
-    print("y_train rows:", len(y_train))
-    print("X_test rows:", len(X_test))
-    print("y_test rows:", len(y_test))
-    print("X_train shape:", X_train.shape)
-    print("y_train shape:", y_train.shape)
-    print("X_test shape:", X_test.shape)
-    print("y_test shape:", y_test.shape)
-    print("========================================\n")
-
     if len(X_train) != len(y_train):
-
         raise HTTPException(
             status_code=400,
             detail=(
@@ -177,7 +150,6 @@ def train_xgboost_model(dataset_id, db: Session):
         )
 
     if len(X_test) != len(y_test):
-
         raise HTTPException(
             status_code=400,
             detail=(
@@ -200,7 +172,7 @@ def train_xgboost_model(dataset_id, db: Session):
     )
 
     # --------------------------------------------------
-    # Define XGBoost model
+    # Define + train XGBoost model
     # --------------------------------------------------
 
     model = XGBClassifier(
@@ -211,23 +183,10 @@ def train_xgboost_model(dataset_id, db: Session):
         eval_metric="logloss"
     )
 
-    # --------------------------------------------------
-    # Train model
-    # --------------------------------------------------
-
-    print("\n========================================")
-    print("Training XGBoost")
-    print("========================================")
-
     try:
-
-        model.fit(
-            X_train,
-            y_train
-        )
+        model.fit(X_train, y_train)
 
     except Exception as e:
-
         raise HTTPException(
             status_code=500,
             detail=(
@@ -240,17 +199,10 @@ def train_xgboost_model(dataset_id, db: Session):
     # --------------------------------------------------
 
     try:
-
-        y_pred = model.predict(
-            X_test
-        )
-
-        y_probability = model.predict_proba(
-            X_test
-        )[:, 1]
+        y_pred = model.predict(X_test)
+        y_probability = model.predict_proba(X_test)[:, 1]
 
     except Exception as e:
-
         raise HTTPException(
             status_code=500,
             detail=(
@@ -262,216 +214,120 @@ def train_xgboost_model(dataset_id, db: Session):
     # Calculate metrics
     # --------------------------------------------------
 
-    accuracy = accuracy_score(
-        y_test,
-        y_pred
-    )
-
-    precision = precision_score(
-        y_test,
-        y_pred,
-        zero_division=0
-    )
-
-    recall = recall_score(
-        y_test,
-        y_pred,
-        zero_division=0
-    )
-
-    f1 = f1_score(
-        y_test,
-        y_pred,
-        zero_division=0
-    )
+    accuracy = accuracy_score(y_test, y_pred)
+    precision = precision_score(y_test, y_pred, zero_division=0)
+    recall = recall_score(y_test, y_pred, zero_division=0)
+    f1 = f1_score(y_test, y_pred, zero_division=0)
 
     try:
-
-        roc_auc = roc_auc_score(
-            y_test,
-            y_probability
-        )
+        roc_auc = roc_auc_score(y_test, y_probability)
 
     except ValueError:
-
         roc_auc = 0.0
 
     # --------------------------------------------------
-    # Display results
-    # --------------------------------------------------
-
-    print(
-        f"Accuracy  : {accuracy:.4f}"
-    )
-
-    print(
-        f"Precision : {precision:.4f}"
-    )
-
-    print(
-        f"Recall    : {recall:.4f}"
-    )
-
-    print(
-        f"F1 Score  : {f1:.4f}"
-    )
-
-    print(
-        f"ROC-AUC   : {roc_auc:.4f}"
-    )
-
-    # --------------------------------------------------
-    # Generate Confusion Matrix
+    # Confusion Matrix — PNG (kept) + structured data (new)
     # --------------------------------------------------
 
     confusion_matrix_path = (
-        dataset_graph_path /
-        "confusion_matrix.png"
+        dataset_graph_path / "confusion_matrix.png"
     )
 
-    cm = confusion_matrix(
-        y_test,
-        y_pred
-    )
+    cm = confusion_matrix(y_test, y_pred)
 
     cm_display = ConfusionMatrixDisplay(
         confusion_matrix=cm,
-        display_labels=[
-            "Legitimate",
-            "Fraud"
-        ]
+        display_labels=["Legitimate", "Fraud"]
     )
 
     cm_display.plot()
-
-    plt.title(
-        "XGBoost Confusion Matrix"
-    )
-
+    plt.title("XGBoost Confusion Matrix")
     plt.tight_layout()
-
-    plt.savefig(
-        confusion_matrix_path,
-        dpi=150
-    )
-
+    plt.savefig(confusion_matrix_path, dpi=150)
     plt.close()
 
+    # cm is ordered by sorted label value (0, 1):
+    # cm[0][0]=TN  cm[0][1]=FP
+    # cm[1][0]=FN  cm[1][1]=TP
+    confusion_matrix_data = {
+        "matrix": cm.tolist(),
+        "labels": ["Legitimate", "Fraud"],
+        "true_negative": int(cm[0][0]),
+        "false_positive": int(cm[0][1]),
+        "false_negative": int(cm[1][0]),
+        "true_positive": int(cm[1][1]),
+    }
+
     # --------------------------------------------------
-    # Generate ROC Curve
+    # ROC Curve — PNG (kept) + structured data (new)
     # --------------------------------------------------
 
     roc_curve_path = (
-        dataset_graph_path /
-        "roc_curve.png"
+        dataset_graph_path / "roc_curve.png"
     )
 
-    try:
+    roc_curve_data = None
 
-        fpr, tpr, thresholds = roc_curve(
-            y_test,
-            y_probability
-        )
+    try:
+        fpr, tpr, thresholds = roc_curve(y_test, y_probability)
 
         plt.figure()
-
-        plt.plot(
-            fpr,
-            tpr,
-            label=(
-                f"XGBoost "
-                f"(AUC = {roc_auc:.4f})"
-            )
-        )
-
-        plt.plot(
-            [0, 1],
-            [0, 1],
-            linestyle="--",
-            label="Random Classifier"
-        )
-
-        plt.xlabel(
-            "False Positive Rate"
-        )
-
-        plt.ylabel(
-            "True Positive Rate"
-        )
-
-        plt.title(
-            "XGBoost ROC Curve"
-        )
-
+        plt.plot(fpr, tpr, label=f"XGBoost (AUC = {roc_auc:.4f})")
+        plt.plot([0, 1], [0, 1], linestyle="--", label="Random Classifier")
+        plt.xlabel("False Positive Rate")
+        plt.ylabel("True Positive Rate")
+        plt.title("XGBoost ROC Curve")
         plt.legend()
-
         plt.tight_layout()
-
-        plt.savefig(
-            roc_curve_path,
-            dpi=150
-        )
-
+        plt.savefig(roc_curve_path, dpi=150)
         plt.close()
 
-    except ValueError:
+        roc_curve_data = {
+            "fpr": [round(float(x), 4) for x in fpr],
+            "tpr": [round(float(x), 4) for x in tpr],
+            "auc": round(float(roc_auc), 4),
+        }
 
+    except ValueError:
         roc_curve_path = None
+        roc_curve_data = None
 
     # --------------------------------------------------
-    # Generate Feature Importance
+    # Feature Importance — PNG (kept) + structured data (new)
     # --------------------------------------------------
 
     feature_importance_path = (
-        dataset_graph_path /
-        "feature_importance.png"
+        dataset_graph_path / "feature_importance.png"
     )
 
-    feature_importance = pd.DataFrame({
+    feature_importance_df = pd.DataFrame({
         "feature": X_train.columns,
         "importance": model.feature_importances_
     })
 
-    feature_importance = (
-        feature_importance.sort_values(
-            by="importance",
-            ascending=False
-        )
+    feature_importance_df = feature_importance_df.sort_values(
+        by="importance",
+        ascending=False
     )
 
-    top_features = (
-        feature_importance.head(15)
-    )
+    top_features = feature_importance_df.head(15)
 
-    plt.figure(
-        figsize=(10, 6)
-    )
-
-    plt.barh(
-        top_features["feature"][::-1],
-        top_features["importance"][::-1]
-    )
-
-    plt.xlabel(
-        "Importance"
-    )
-
-    plt.ylabel(
-        "Feature"
-    )
-
-    plt.title(
-        "XGBoost Feature Importance"
-    )
-
+    plt.figure(figsize=(10, 6))
+    plt.barh(top_features["feature"][::-1], top_features["importance"][::-1])
+    plt.xlabel("Importance")
+    plt.ylabel("Feature")
+    plt.title("XGBoost Feature Importance")
     plt.tight_layout()
-
-    plt.savefig(
-        feature_importance_path,
-        dpi=150
-    )
-
+    plt.savefig(feature_importance_path, dpi=150)
     plt.close()
+
+    feature_importance_data = [
+        {
+            "feature": str(row["feature"]),
+            "importance": round(float(row["importance"]), 4),
+        }
+        for _, row in top_features.iterrows()
+    ]
 
     # --------------------------------------------------
     # Save trained model
@@ -480,48 +336,34 @@ def train_xgboost_model(dataset_id, db: Session):
     model_filename = "xgboost.joblib"
 
     model_file_path = (
-        dataset_model_path /
-        model_filename
+        dataset_model_path / model_filename
     )
 
-    joblib.dump(
-        model,
-        model_file_path
-    )
+    joblib.dump(model, model_file_path)
 
     # --------------------------------------------------
     # Save Model Report
     # --------------------------------------------------
 
     report = ModelReport(
-
         dataset_id=dataset.id,
-
         model_name="XGBoost",
-
         accuracy=float(accuracy),
-
         precision=float(precision),
-
         recall=float(recall),
-
         f1_score=float(f1),
-
         roc_auc=float(roc_auc),
-
         train_rows=len(X_train),
-
         test_rows=len(X_test),
-
         model_path=str(model_file_path),
-
-        status="Completed"
+        status="Completed",
+        confusion_matrix=confusion_matrix_data,
+        roc_curve=roc_curve_data,
+        feature_importance=feature_importance_data,
     )
 
     db.add(report)
-
     db.commit()
-
     db.refresh(report)
 
     # --------------------------------------------------
@@ -529,70 +371,24 @@ def train_xgboost_model(dataset_id, db: Session):
     # --------------------------------------------------
 
     return {
-
-        "dataset_id": str(
-            dataset.id
-        ),
-
-        "dataset_name": (
-            dataset.dataset_name
-        ),
-
+        "dataset_id": str(dataset.id),
+        "dataset_name": dataset.dataset_name,
         "model_name": "XGBoost",
-
-        "accuracy": round(
-            float(accuracy),
-            4
-        ),
-
-        "precision": round(
-            float(precision),
-            4
-        ),
-
-        "recall": round(
-            float(recall),
-            4
-        ),
-
-        "f1_score": round(
-            float(f1),
-            4
-        ),
-
-        "roc_auc": round(
-            float(roc_auc),
-            4
-        ),
-
-        "train_rows": len(
-            X_train
-        ),
-
-        "test_rows": len(
-            X_test
-        ),
-
-        "model_path": str(
-            model_file_path
-        ),
-
+        "accuracy": round(float(accuracy), 4),
+        "precision": round(float(precision), 4),
+        "recall": round(float(recall), 4),
+        "f1_score": round(float(f1), 4),
+        "roc_auc": round(float(roc_auc), 4),
+        "train_rows": len(X_train),
+        "test_rows": len(X_test),
+        "model_path": str(model_file_path),
+        "confusion_matrix": confusion_matrix_data,
+        "roc_curve": roc_curve_data,
+        "feature_importance": feature_importance_data,
         "graphs": {
-
-            "confusion_matrix": str(
-                confusion_matrix_path
-            ),
-
-            "roc_curve": (
-                str(roc_curve_path)
-                if roc_curve_path
-                else None
-            ),
-
-            "feature_importance": str(
-                feature_importance_path
-            )
+            "confusion_matrix": str(confusion_matrix_path),
+            "roc_curve": str(roc_curve_path) if roc_curve_path else None,
+            "feature_importance": str(feature_importance_path)
         },
-
         "status": "Completed"
     }

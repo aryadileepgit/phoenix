@@ -1,4 +1,4 @@
-import { SlidersHorizontal, Binary, Scaling, Rows3, FileOutput } from "lucide-react";
+import { SlidersHorizontal, Scaling, Rows3, FileOutput } from "lucide-react";
 import { PipelineActionCard } from "./PipelineActionCard";
 import { StatTile } from "./StatTile";
 import { safeNumber, safeString } from "../../utils/format";
