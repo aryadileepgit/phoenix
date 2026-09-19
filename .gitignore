@@ -8,13 +8,21 @@ __pycache__/
 node_modules/
 dist/
 
-# Uploaded/generated files
+# Phoenix uploaded/generated data
 backend/storage/raw/
 backend/storage/clean/
 backend/storage/preprocessed/
 backend/storage/smote/
 backend/storage/features/
 backend/storage/training/
+backend/storage/processed/
+backend/storage/engineered/
+backend/storage/balanced/
+
+# Phoenix generated ML artifacts
+backend/storage/models/
+backend/storage/graphs/
+backend/storage/preprocessing_models/
 
 # IDE
 .vscode/
