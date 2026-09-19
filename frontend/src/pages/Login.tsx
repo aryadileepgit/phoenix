@@ -324,8 +324,8 @@ export function Login({ onLogin }: LoginProps) {
                 </div>
               </div>
 
-              {/* Remember / Forgot */}
-              <div className="flex items-center justify-between text-sm">
+              {/* Remember me */}
+              <div className="flex items-center text-sm">
                 <label className="flex cursor-pointer items-center gap-2 text-slate-300">
                   <input
                     type="checkbox"
@@ -338,13 +338,6 @@ export function Login({ onLogin }: LoginProps) {
 
                   Remember me
                 </label>
-
-                <span
-                  className="cursor-not-allowed text-faint"
-                  title="Contact your system administrator"
-                >
-                  Forgot Password?
-                </span>
               </div>
 
               {/* Error */}
@@ -366,9 +359,7 @@ export function Login({ onLogin }: LoginProps) {
                 }}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-white shadow-[0_8px_30px_rgba(249,115,16,0.35)] transition-colors hover:bg-primary-dark disabled:opacity-70"
               >
-                {submitting
-                  ? "Authenticating…"
-                  : "Login"}
+                {submitting ? "Authenticating…" : "Login"}
 
                 {!submitting && <ArrowRight size={16} />}
               </motion.button>

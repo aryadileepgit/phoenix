@@ -105,7 +105,7 @@ const STAT_CARDS = [
   {
     icon: DatabaseIcon,
     label: "Datasets Loaded",
-    value: "12",
+    value: "4",
     delta: "+2 this week",
     bg: "bg-secondary/10",
     color: "text-secondary",
@@ -113,7 +113,7 @@ const STAT_CARDS = [
   {
     icon: CreditCard,
     label: "Total Transactions",
-    value: "1.24M",
+    value: "40",
     delta: "+8.5% vs last week",
     bg: "bg-violet-500/10",
     color: "text-violet-400",
@@ -121,7 +121,7 @@ const STAT_CARDS = [
   {
     icon: ShieldCheck,
     label: "Fraud Detected",
-    value: "3,678",
+    value: "8",
     delta: "+12.4% vs last week",
     bg: "bg-danger/10",
     color: "text-danger",

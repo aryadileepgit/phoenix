@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, Integer, String, Boolean
+from sqlalchemy import DateTime, Numeric, String, Boolean, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,19 +17,14 @@ class Transaction(Base):
         default=uuid.uuid4,
     )
 
-    dataset_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("datasets.id"),
+    transaction_id: Mapped[str] = mapped_column(
+        String(100),
+        unique=True,
         nullable=False,
     )
 
-    step: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-    )
-
-    transaction_type: Mapped[str] = mapped_column(
-        String(30),
+    account_id: Mapped[str] = mapped_column(
+        String(100),
         nullable=False,
     )
 
@@ -38,49 +33,54 @@ class Transaction(Base):
         nullable=False,
     )
 
-    sender: Mapped[str | None] = mapped_column(
-        String(50),
+    transaction_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    product_code: Mapped[str | None] = mapped_column(
+        String(10),
         nullable=True,
     )
 
-    sender_balance_before: Mapped[float] = mapped_column(
-        Numeric(15, 2),
-        nullable=False,
-    )
-
-    sender_balance_after: Mapped[float] = mapped_column(
-        Numeric(15, 2),
-        nullable=False,
-    )
-
-    receiver: Mapped[str | None] = mapped_column(
-        String(50),
+    card_information: Mapped[dict | None] = mapped_column(
+        JSON,
         nullable=True,
     )
 
-    receiver_balance_before: Mapped[float] = mapped_column(
-        Numeric(15, 2),
-        nullable=False,
+    device_information: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
     )
 
-    receiver_balance_after: Mapped[float] = mapped_column(
-        Numeric(15, 2),
-        nullable=False,
+    additional_data: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    fraud_probability: Mapped[float | None] = mapped_column(
+        Numeric(5, 4),
+        nullable=True,
+    )
+
+    predicted_label: Mapped[bool | None] = mapped_column(
+        Boolean,
+        nullable=True,
+    )
+
+    risk_level: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    decision: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
     )
 
     actual_label: Mapped[bool | None] = mapped_column(
         Boolean,
         nullable=True,
-    )
-
-    predicted_label: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-    )
-
-    fraud_probability: Mapped[float] = mapped_column(
-        Numeric(5, 4),
-        nullable=False,
     )
 
     created_at: Mapped[datetime] = mapped_column(

@@ -1,0 +1,42 @@
+{
+    "ACC_10001": {
+        "transaction_count": 2,
+        "total_amount": 2112.09,
+        "average_amount": 1056.05,
+        "usual_city": "Kochi",
+        "usual_device": "DEV_1001",
+        "last_transaction_time": "2026-09-18T10:22:52.169057+00:00"
+    },
+    "ACC_10002": {
+        "transaction_count": 1,
+        "total_amount": 1742.35,
+        "average_amount": 1742.35,
+        "usual_city": "Kottayam",
+        "usual_device": "DEV_1002",
+        "last_transaction_time": "2026-09-18T10:22:47.048961+00:00"
+    },
+    "ACC_10003": {
+        "transaction_count": 3,
+        "total_amount": 6882.42,
+        "average_amount": 2294.14,
+        "usual_city": "Kozhikode",
+        "usual_device": "DEV_1003",
+        "last_transaction_time": "2026-09-18T10:23:07.552177+00:00"
+    },
+    "ACC_10004": {
+        "transaction_count": 1,
+        "total_amount": 570.66,
+        "average_amount": 570.66,
+        "usual_city": "Thrissur",
+        "usual_device": "DEV_1004",
+        "last_transaction_time": "2026-09-18T10:23:12.662775+00:00"
+    },
+    "ACC_10005": {
+        "transaction_count": 0,
+        "total_amount": 0.0,
+        "average_amount": 0.0,
+        "usual_city": "Thiruvananthapuram",
+        "usual_device": "DEV_1005",
+        "last_transaction_time": null
+    }
+}

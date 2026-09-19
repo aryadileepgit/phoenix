@@ -62,3 +62,25 @@ export function safeTime(value: unknown): string {
 export function safePercent(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.round(value * 100) : 0;
 }
+
+/** Formats an ISO/date-like string as a short relative time ("5 min ago"), or a placeholder. */
+export function timeAgo(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+
+  return date.toLocaleDateString();
+}

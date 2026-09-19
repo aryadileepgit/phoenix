@@ -3,50 +3,109 @@ from pathlib import Path
 import joblib
 import pandas as pd
 
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler
-
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OrdinalEncoder
 
 from app.models.dataset import Dataset
 from app.models.preprocessing_report import PreprocessingReport
 
 
-# --------------------------------------------------
-# Storage paths
-# --------------------------------------------------
-
-PROCESSED_PATH = Path("storage/processed")
+TRAINING_PATH = Path("storage/training")
 PREPROCESSED_PATH = Path("storage/preprocessed")
 PREPROCESSING_MODEL_PATH = Path("storage/preprocessing_models")
-
-
-# --------------------------------------------------
-# Columns NOT used by the fraud detection model
-# --------------------------------------------------
-
-EXCLUDED_COLUMNS = [
-    "nameOrig",
-    "nameDest"
-]
-
-
-# --------------------------------------------------
-# Target column
-# --------------------------------------------------
 
 TARGET_COLUMN = "isFraud"
 
 
-# --------------------------------------------------
-# Preprocess Dataset
-# --------------------------------------------------
+TRANSACTION_CATEGORICAL_COLUMNS = [
+    "ProductCD",
+    "card1",
+    "card2",
+    "card3",
+    "card4",
+    "card5",
+    "card6",
+    "addr1",
+    "addr2",
+    "P_emaildomain",
+    "R_emaildomain",
+    "M1",
+    "M2",
+    "M3",
+    "M4",
+    "M5",
+    "M6",
+    "M7",
+    "M8",
+    "M9",
+    "DeviceType",
+    "DeviceInfo",
+]
+
+
+def get_identity_categorical_columns(df):
+    return [
+        column
+        for column in df.columns
+        if column.startswith("id_")
+        and column[3:].isdigit()
+        and 12 <= int(column[3:]) <= 38
+    ]
+
+
+def get_categorical_columns(df):
+
+    categorical_columns = []
+
+    for column in TRANSACTION_CATEGORICAL_COLUMNS:
+        if column in df.columns:
+            categorical_columns.append(column)
+
+    for column in get_identity_categorical_columns(df):
+        if column not in categorical_columns:
+            categorical_columns.append(column)
+
+    for column in df.select_dtypes(
+        include=["object", "string", "category"]
+    ).columns:
+
+        if column not in categorical_columns:
+            categorical_columns.append(column)
+
+    return categorical_columns
+
+
+def normalize_categorical_columns(df, categorical_columns):
+    """
+    Convert categorical values to strings.
+
+    IEEE-CIS contains columns where values can be a mixture
+    of numbers and strings. OrdinalEncoder requires a
+    consistent value type, so categorical values are
+    normalized to strings before encoding.
+    """
+
+    df = df.copy()
+
+    for column in categorical_columns:
+
+        if column in df.columns:
+
+            df[column] = df[column].apply(
+                lambda value: "Unknown"
+                if pd.isna(value)
+                else str(value)
+            )
+
+    return df
+
 
 def preprocess_dataset(dataset_id, db: Session):
-
-    # --------------------------------------------------
-    # Create output folders
-    # --------------------------------------------------
 
     PREPROCESSED_PATH.mkdir(
         parents=True,
@@ -58,254 +117,494 @@ def preprocess_dataset(dataset_id, db: Session):
         exist_ok=True
     )
 
-    # --------------------------------------------------
-    # Find Dataset
-    # --------------------------------------------------
+    # ---------------------------------------------------------
+    # Find dataset
+    # ---------------------------------------------------------
 
-    dataset = db.query(Dataset).filter(
-        Dataset.id == dataset_id
-    ).first()
+    dataset = (
+        db.query(Dataset)
+        .filter(Dataset.id == dataset_id)
+        .first()
+    )
 
     if dataset is None:
+
         raise HTTPException(
             status_code=404,
             detail="Dataset not found."
         )
 
-    # --------------------------------------------------
-    # Load Clean Dataset
-    # --------------------------------------------------
+    # ---------------------------------------------------------
+    # Locate training split
+    # ---------------------------------------------------------
 
-    cleaned_file = (
-        PROCESSED_PATH /
-        f"{dataset.dataset_name}_clean.csv"
+    training_folder = (
+        TRAINING_PATH / str(dataset_id)
     )
 
-    if not cleaned_file.exists():
+    if not training_folder.exists():
+
         raise HTTPException(
             status_code=404,
-            detail="Cleaned dataset not found."
+            detail="Training split not found. Run train-test split first."
         )
+
+    x_train_path = training_folder / "X_train.csv"
+    y_train_path = training_folder / "y_train.csv"
+    x_test_path = training_folder / "X_test.csv"
+    y_test_path = training_folder / "y_test.csv"
+
+    required_files = [
+        x_train_path,
+        y_train_path,
+        x_test_path,
+        y_test_path
+    ]
+
+    for file_path in required_files:
+
+        if not file_path.exists():
+
+            raise HTTPException(
+                status_code=404,
+                detail=f"Required file not found: {file_path.name}"
+            )
+
+    # ---------------------------------------------------------
+    # Read training and testing data
+    # ---------------------------------------------------------
 
     try:
 
-        df = pd.read_csv(
-            cleaned_file
+        X_train = pd.read_csv(
+            x_train_path
         )
 
-    except Exception as e:
+        y_train = pd.read_csv(
+            y_train_path
+        )
+
+        X_test = pd.read_csv(
+            x_test_path
+        )
+
+        y_test = pd.read_csv(
+            y_test_path
+        )
+
+    except Exception as exc:
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                f"Unable to load cleaned dataset: {str(e)}"
-            )
+            detail=f"Failed to read training data: {str(exc)}"
         )
 
-    rows_processed = len(df)
+    # ---------------------------------------------------------
+    # Extract target from y_train
+    # ---------------------------------------------------------
 
-    # --------------------------------------------------
-    # Check Target Column
-    # --------------------------------------------------
+    if TARGET_COLUMN in y_train.columns:
 
-    if TARGET_COLUMN not in df.columns:
+        y_train = y_train[TARGET_COLUMN]
+
+    elif len(y_train.columns) == 1:
+
+        y_train = y_train.iloc[:, 0]
+
+    else:
 
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"Target column '{TARGET_COLUMN}' "
-                "not found in dataset."
-            )
+            detail="Invalid y_train file."
         )
 
-    # --------------------------------------------------
-    # Remove Account Identifier Columns
-    # --------------------------------------------------
+    # ---------------------------------------------------------
+    # Extract target from y_test
+    # ---------------------------------------------------------
 
-    removed_columns = []
+    if TARGET_COLUMN in y_test.columns:
 
-    for column in EXCLUDED_COLUMNS:
+        y_test = y_test[TARGET_COLUMN]
 
-        if column in df.columns:
+    elif len(y_test.columns) == 1:
 
-            df = df.drop(
-                columns=[column]
-            )
+        y_test = y_test.iloc[:, 0]
 
-            removed_columns.append(
-                column
-            )
+    else:
 
-    # --------------------------------------------------
-    # Create Dataset-Specific Preprocessing Folder
-    # --------------------------------------------------
-
-    dataset_preprocessing_path = (
-        PREPROCESSING_MODEL_PATH /
-        str(dataset.id)
-    )
-
-    dataset_preprocessing_path.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    # --------------------------------------------------
-    # Encode Categorical Columns
-    # --------------------------------------------------
-
-    # Do NOT encode the target column here.
-    # isFraud is already numeric (0/1).
-
-    categorical_columns = (
-        df.select_dtypes(
-            include=["object", "string"]
-        ).columns.tolist()
-    )
-
-    encoders = {}
-
-    encoded_count = 0
-
-    for column in categorical_columns:
-
-        encoder = LabelEncoder()
-
-        df[column] = encoder.fit_transform(
-            df[column].astype(str)
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid y_test file."
         )
 
-        encoders[column] = encoder
+    # ---------------------------------------------------------
+    # Validate target values
+    # ---------------------------------------------------------
 
-        encoded_count += 1
+    if not set(
+        y_train.dropna().unique()
+    ).issubset({0, 1}):
 
-    # --------------------------------------------------
-    # Scale Numeric Feature Columns
-    # --------------------------------------------------
+        raise HTTPException(
+            status_code=400,
+            detail="y_train must contain only 0 and 1."
+        )
+
+    if not set(
+        y_test.dropna().unique()
+    ).issubset({0, 1}):
+
+        raise HTTPException(
+            status_code=400,
+            detail="y_test must contain only 0 and 1."
+        )
+
+    # ---------------------------------------------------------
+    # Remove identifier columns
+    # ---------------------------------------------------------
+
+    identifier_columns = []
+
+    if "TransactionID" in X_train.columns:
+
+        identifier_columns.append(
+            "TransactionID"
+        )
+
+    X_train = X_train.drop(
+        columns=identifier_columns,
+        errors="ignore"
+    )
+
+    X_test = X_test.drop(
+        columns=identifier_columns,
+        errors="ignore"
+    )
+
+    # ---------------------------------------------------------
+    # Keep only common columns
+    # ---------------------------------------------------------
+
+    common_columns = [
+        column
+        for column in X_train.columns
+        if column in X_test.columns
+    ]
+
+    X_train = X_train[
+        common_columns
+    ]
+
+    X_test = X_test[
+        common_columns
+    ]
+
+    # ---------------------------------------------------------
+    # Remove features with >50% missing values
     #
     # IMPORTANT:
-    # isFraud is the TARGET.
-    # It must NOT be included in the scaler.
+    # The decision is based ONLY on X_train.
+    # ---------------------------------------------------------
+
+    missing_ratio = X_train.isnull().mean()
+
+    high_missing_columns = (
+        missing_ratio[
+            missing_ratio > 0.50
+        ]
+        .index
+        .tolist()
+    )
+
+    X_train = X_train.drop(
+        columns=high_missing_columns,
+        errors="ignore"
+    )
+
+    X_test = X_test.drop(
+        columns=high_missing_columns,
+        errors="ignore"
+    )
+
+    # ---------------------------------------------------------
+    # Identify categorical columns
+    # ---------------------------------------------------------
+
+    categorical_columns = (
+        get_categorical_columns(
+            X_train
+        )
+    )
+
+    # ---------------------------------------------------------
+    # Identify numerical columns
+    # ---------------------------------------------------------
+
+    numerical_columns = [
+        column
+        for column in X_train.columns
+        if column not in categorical_columns
+    ]
+
+    # ---------------------------------------------------------
+    # Normalize categorical values
     #
-    # The scaler should only learn from model features.
-    # --------------------------------------------------
+    # Fixes IEEE-CIS mixed float/string columns.
+    # ---------------------------------------------------------
 
-    numeric_columns = (
-        df.select_dtypes(
-            include=["int64", "float64"]
-        ).columns.tolist()
+    X_train = normalize_categorical_columns(
+        X_train,
+        categorical_columns
     )
 
-    if TARGET_COLUMN in numeric_columns:
-
-        numeric_columns.remove(
-            TARGET_COLUMN
-        )
-
-    scaler = MinMaxScaler()
-
-    if len(numeric_columns) > 0:
-
-        df[numeric_columns] = scaler.fit_transform(
-            df[numeric_columns]
-        )
-
-    scaled_count = len(numeric_columns)
-
-    # --------------------------------------------------
-    # Save Preprocessed Dataset
-    # --------------------------------------------------
-
-    filename = (
-        f"{dataset.dataset_name}_preprocessed.csv"
+    X_test = normalize_categorical_columns(
+        X_test,
+        categorical_columns
     )
 
-    output_path = (
-        PREPROCESSED_PATH /
-        filename
+    # ---------------------------------------------------------
+    # Numerical preprocessing
+    # ---------------------------------------------------------
+
+    numerical_pipeline = Pipeline(
+        steps=[
+            (
+                "imputer",
+                SimpleImputer(
+                    strategy="median"
+                )
+            )
+        ]
     )
+
+    # ---------------------------------------------------------
+    # Categorical preprocessing
+    # ---------------------------------------------------------
+
+    categorical_pipeline = Pipeline(
+        steps=[
+            (
+                "imputer",
+                SimpleImputer(
+                    strategy="constant",
+                    fill_value="Unknown"
+                )
+            ),
+            (
+                "encoder",
+                OrdinalEncoder(
+                    handle_unknown="use_encoded_value",
+                    unknown_value=-1
+                )
+            )
+        ]
+    )
+
+    # ---------------------------------------------------------
+    # Create ColumnTransformer
+    # ---------------------------------------------------------
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            (
+                "numerical",
+                numerical_pipeline,
+                numerical_columns
+            ),
+            (
+                "categorical",
+                categorical_pipeline,
+                categorical_columns
+            )
+        ],
+        remainder="drop",
+        verbose_feature_names_out=False
+    )
+
+    # ---------------------------------------------------------
+    # Fit on training data
+    # Transform test data using same fitted preprocessor
+    # ---------------------------------------------------------
 
     try:
 
-        df.to_csv(
-            output_path,
-            index=False
-        )
-
-    except Exception as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                f"Unable to save preprocessed dataset: {str(e)}"
+        X_train_processed = (
+            preprocessor.fit_transform(
+                X_train
             )
         )
 
-    # --------------------------------------------------
-    # Save Encoders
-    # --------------------------------------------------
+        X_test_processed = (
+            preprocessor.transform(
+                X_test
+            )
+        )
 
-    encoder_path = (
-        dataset_preprocessing_path /
-        "encoders.joblib"
+    except Exception as exc:
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Preprocessing failed: {str(exc)}"
+        )
+
+    # ---------------------------------------------------------
+    # Get final feature names
+    # ---------------------------------------------------------
+
+    feature_names = (
+        preprocessor
+        .get_feature_names_out()
     )
 
-    try:
+    # ---------------------------------------------------------
+    # Convert processed arrays to DataFrames
+    # ---------------------------------------------------------
 
-        joblib.dump(
-            encoders,
-            encoder_path
-        )
-
-    except Exception as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                f"Unable to save encoders: {str(e)}"
-            )
-        )
-
-    # --------------------------------------------------
-    # Save Scaler
-    # --------------------------------------------------
-
-    scaler_path = (
-        dataset_preprocessing_path /
-        "scaler.joblib"
+    X_train_processed = pd.DataFrame(
+        X_train_processed,
+        columns=feature_names
     )
 
-    try:
+    X_test_processed = pd.DataFrame(
+        X_test_processed,
+        columns=feature_names
+    )
 
-        joblib.dump(
-            scaler,
-            scaler_path
-        )
+    # ---------------------------------------------------------
+    # Add target column back
+    # ---------------------------------------------------------
 
-    except Exception as e:
+    X_train_processed[
+        TARGET_COLUMN
+    ] = y_train.reset_index(drop=True)
 
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                f"Unable to save scaler: {str(e)}"
-            )
-        )
+    X_test_processed[
+        TARGET_COLUMN
+    ] = y_test.reset_index(drop=True)
 
-    # --------------------------------------------------
-    # Save Preprocessing Report
-    # --------------------------------------------------
+    dataset_name = dataset.dataset_name
+
+    # ---------------------------------------------------------
+    # Output file paths
+    # ---------------------------------------------------------
+
+    train_output_file = (
+        PREPROCESSED_PATH
+        / f"{dataset_name}_train_preprocessed.csv"
+    )
+
+    test_output_file = (
+        PREPROCESSED_PATH
+        / f"{dataset_name}_test_preprocessed.csv"
+    )
+
+    # ---------------------------------------------------------
+    # Save processed training data
+    # ---------------------------------------------------------
+
+    X_train_processed.to_csv(
+        train_output_file,
+        index=False
+    )
+
+    # ---------------------------------------------------------
+    # Save processed testing data
+    # ---------------------------------------------------------
+
+    X_test_processed.to_csv(
+        test_output_file,
+        index=False
+    )
+
+    # ---------------------------------------------------------
+    # Preprocessor and metadata paths
+    # ---------------------------------------------------------
+
+    preprocessor_file = (
+        PREPROCESSING_MODEL_PATH
+        / f"{dataset_name}_preprocessor.joblib"
+    )
+
+    metadata_file = (
+        PREPROCESSING_MODEL_PATH
+        / f"{dataset_name}_feature_metadata.joblib"
+    )
+
+    # ---------------------------------------------------------
+    # Metadata
+    # ---------------------------------------------------------
+
+    metadata = {
+
+        "dataset_id":
+            str(dataset_id),
+
+        "dataset_name":
+            dataset_name,
+
+        "target_column":
+            TARGET_COLUMN,
+
+        "identifier_columns_removed":
+            identifier_columns,
+
+        "high_missing_columns_removed":
+            high_missing_columns,
+
+        "high_missing_threshold":
+            0.50,
+
+        "categorical_columns":
+            categorical_columns,
+
+        "numerical_columns":
+            numerical_columns,
+
+        "total_features":
+            len(feature_names),
+
+        "training_rows":
+            len(X_train_processed),
+
+        "testing_rows":
+            len(X_test_processed)
+    }
+
+    # ---------------------------------------------------------
+    # Save fitted preprocessor
+    # ---------------------------------------------------------
+
+    joblib.dump(
+        preprocessor,
+        preprocessor_file
+    )
+
+    # ---------------------------------------------------------
+    # Save feature metadata
+    # ---------------------------------------------------------
+
+    joblib.dump(
+        metadata,
+        metadata_file
+    )
+
+    # ---------------------------------------------------------
+    # Database report
+    # ---------------------------------------------------------
 
     report = PreprocessingReport(
 
         dataset_id=dataset.id,
 
-        rows_processed=rows_processed,
+        rows_processed=len(X_train_processed),
 
-        categorical_encoded=encoded_count,
+        categorical_encoded=len(categorical_columns),
 
-        numerical_scaled=scaled_count,
+        numerical_scaled=0,
 
-        output_file=str(output_path),
+        output_file=str(
+            train_output_file
+        ),
 
         status="Completed"
     )
@@ -316,95 +615,57 @@ def preprocess_dataset(dataset_id, db: Session):
 
     db.refresh(report)
 
-    # --------------------------------------------------
-    # Display Information
-    # --------------------------------------------------
-
-    print("\n========================================")
-    print("PREPROCESSING COMPLETED")
-    print("========================================")
-
-    print(
-        "Dataset ID:",
-        dataset.id
-    )
-
-    print(
-        "Rows processed:",
-        rows_processed
-    )
-
-    print(
-        "Excluded columns:",
-        removed_columns
-    )
-
-    print(
-        "Target column excluded from scaling:",
-        TARGET_COLUMN
-    )
-
-    print(
-        "Categorical columns encoded:",
-        encoded_count
-    )
-
-    print(
-        "Numeric feature columns scaled:",
-        scaled_count
-    )
-
-    print(
-        "Preprocessed dataset:",
-        output_path
-    )
-
-    print(
-        "Encoders:",
-        encoder_path
-    )
-
-    print(
-        "Scaler:",
-        scaler_path
-    )
-
-    print("========================================\n")
-
-    # --------------------------------------------------
-    # Return Response
-    # --------------------------------------------------
+    # ---------------------------------------------------------
+    # Return response
+    # ---------------------------------------------------------
 
     return {
 
-        "dataset_id": str(
-            dataset.id
-        ),
+        "dataset_id":
+            str(dataset_id),
 
-        "rows_processed": rows_processed,
+        "dataset_name":
+            dataset_name,
 
-        "excluded_columns": removed_columns,
+        "training_rows":
+            len(X_train_processed),
 
-        "target_column": TARGET_COLUMN,
+        "testing_rows":
+            len(X_test_processed),
 
-        "target_excluded_from_scaling": True,
+        "categorical_features":
+            len(categorical_columns),
 
-        "categorical_encoded": encoded_count,
+        "numerical_features":
+            len(numerical_columns),
 
-        "numerical_scaled": scaled_count,
+        "total_features":
+            len(feature_names),
 
-        "output_file": filename,
+        "identifier_columns_removed":
+            identifier_columns,
 
-        "preprocessing_artifacts": {
+        "high_missing_columns_removed":
+            len(high_missing_columns),
 
-            "encoders": str(
-                encoder_path
-            ),
+        "high_missing_threshold":
+            0.50,
 
-            "scaler": str(
-                scaler_path
-            )
-        },
+        "numerical_scaled":
+            0,
 
-        "status": "Completed"
+        "train_file":
+            train_output_file.name,
+
+        "test_file":
+            test_output_file.name,
+
+        "preprocessor_file":
+            preprocessor_file.name,
+
+        "metadata_file":
+            metadata_file.name,
+
+        "status":
+            "Completed"
     }
