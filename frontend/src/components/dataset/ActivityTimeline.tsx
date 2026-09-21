@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Activity as ActivityIcon } from "lucide-react";
+import { Activity as ActivityIcon, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 
 export interface ActivityEntry {
   time: string;

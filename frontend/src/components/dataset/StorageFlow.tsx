@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Folder, ArrowRight } from "lucide-react";
+import { Folder, ArrowRight, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 
 const STAGES = [
   "Raw Dataset",

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { GitMerge, TrendingUp, FileOutput } from "lucide-react";
+import { GitMerge, TrendingUp, FileOutput, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import { PipelineActionCard } from "./PipelineActionCard";
 import { StatTile } from "./StatTile";
 import { safeNumber, safeString } from "../../utils/format";

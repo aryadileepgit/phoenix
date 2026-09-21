@@ -31,3 +31,12 @@ backend/storage/preprocessing_models/
 # OS
 .DS_Store
 Thumbs.db
+# Phoenix generated data and ML artifacts
+backend/storage/
+
+
+# Environment secrets
+.env
+backend/.env
+frontend/.env
+

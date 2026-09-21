@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from pydantic import ValidationError
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.database.database import SessionLocal
@@ -104,6 +106,20 @@ async def create_transaction(
         db.rollback()
         raise
 
+    except ValidationError as e:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Transaction failed validation.",
+                "errors": e.errors(
+                    include_url=False,
+                    include_context=False,
+                ),
+            },
+        )
+
     except Exception as e:
         db.rollback()
 
@@ -158,6 +174,107 @@ def explain_transaction(
             status_code=500,
             detail=f"SHAP explanation failed: {str(e)}",
         )
+
+
+@router.get("/accounts")
+def list_accounts(
+    db: Session = Depends(get_db),
+):
+    """
+    Account-level fraud monitoring view.
+
+    Accounts are derived from actual scored API transactions by
+    grouping on Transaction.account_id — the API-supplied
+    identifier (e.g. simulator ACC_* IDs). IEEE-CIS itself has
+    no native account column; Phoenix does not invent bank
+    customer accounts. All prediction fields come from the
+    already-trained XGBoost scorer persisted on each row.
+    """
+
+    rows = (
+        db.query(
+            Transaction.account_id,
+            func.count(Transaction.id).label(
+                "transaction_count"
+            ),
+            func.sum(Transaction.amount).label(
+                "total_amount"
+            ),
+            func.sum(
+                case(
+                    (
+                        Transaction.predicted_label
+                        == True,  # noqa: E712
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("fraud_predictions"),
+            func.max(
+                Transaction.fraud_probability
+            ).label("highest_fraud_probability"),
+        )
+        .group_by(Transaction.account_id)
+        .all()
+    )
+
+    accounts = []
+
+    for (
+        account_id,
+        transaction_count,
+        total_amount,
+        fraud_predictions,
+        highest_fraud_probability,
+    ) in rows:
+
+        highest = (
+            float(highest_fraud_probability)
+            if highest_fraud_probability is not None
+            else None
+        )
+
+        if highest is None:
+            account_risk = "LOW"
+        elif highest >= 0.70:
+            account_risk = "HIGH"
+        elif highest >= 0.30:
+            account_risk = "MEDIUM"
+        else:
+            account_risk = "LOW"
+
+        accounts.append(
+            {
+                "account_id": account_id,
+                "transaction_count": int(
+                    transaction_count
+                ),
+                "total_amount": round(
+                    float(total_amount or 0.0), 2
+                ),
+                "fraud_predictions": int(
+                    fraud_predictions or 0
+                ),
+                "highest_fraud_probability": highest,
+                "risk_level": account_risk,
+            }
+        )
+
+    accounts.sort(
+        key=lambda account: (
+            account["highest_fraud_probability"]
+            if account["highest_fraud_probability"]
+            is not None
+            else -1.0,
+            account["transaction_count"],
+        ),
+        reverse=True,
+    )
+
+    return {
+        "accounts": accounts,
+        "total_accounts": len(accounts),
+    }
 
 
 @router.get("/account/{account_id}/history")
@@ -651,4 +768,146 @@ def get_account_network(
             related_accounts_list
         ),
         "connected_accounts": related_accounts_list,
+    }
+
+
+def _serialize_transaction(transaction):
+    """
+    Stored-row serialization for list/detail responses.
+    Field names match the Transaction model and the
+    TransactionResponse schema (snake_case).
+    """
+
+    return {
+        "id": str(transaction.id),
+        "transaction_id": transaction.transaction_id,
+        "account_id": transaction.account_id,
+        "amount": float(transaction.amount),
+        "transaction_time": transaction.transaction_time,
+        "product_code": transaction.product_code,
+        "card_information": transaction.card_information,
+        "device_information": transaction.device_information,
+        "additional_data": transaction.additional_data,
+        "fraud_probability": (
+            float(transaction.fraud_probability)
+            if transaction.fraud_probability is not None
+            else None
+        ),
+        "predicted_label": transaction.predicted_label,
+        "risk_level": transaction.risk_level,
+        "decision": transaction.decision,
+        "actual_label": transaction.actual_label,
+        "created_at": transaction.created_at,
+    }
+
+
+@router.get("")
+@router.get("/")
+def list_transactions(
+    prediction: str = Query(
+        default="all",
+        pattern="^(all|fraud|legitimate)$",
+    ),
+    search: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """
+    Scored transactions with table-wide summary counts.
+
+    `summary` always reflects the full table; `transactions`
+    reflects the filters + pagination. All prediction fields
+    are the stored XGBoost outputs, never recomputed here.
+    """
+
+    total_transactions = db.query(
+        func.count(Transaction.id)
+    ).scalar() or 0
+
+    fraud_count = (
+        db.query(func.count(Transaction.id))
+        .filter(Transaction.predicted_label == True)  # noqa: E712
+        .scalar()
+        or 0
+    )
+
+    legitimate_count = (
+        db.query(func.count(Transaction.id))
+        .filter(Transaction.predicted_label == False)  # noqa: E712
+        .scalar()
+        or 0
+    )
+
+    fraud_rate = (
+        round(fraud_count / total_transactions * 100, 2)
+        if total_transactions
+        else 0.0
+    )
+
+    query = db.query(Transaction)
+
+    if prediction == "fraud":
+        query = query.filter(
+            Transaction.predicted_label == True  # noqa: E712
+        )
+    elif prediction == "legitimate":
+        query = query.filter(
+            Transaction.predicted_label == False  # noqa: E712
+        )
+
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(
+            (Transaction.transaction_id.ilike(pattern))
+            | (Transaction.account_id.ilike(pattern))
+        )
+
+    rows = (
+        query.order_by(Transaction.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "message": "Transactions retrieved successfully.",
+        "summary": {
+            "total_transactions": total_transactions,
+            "fraud_count": fraud_count,
+            "legitimate_count": legitimate_count,
+            "fraud_rate": fraud_rate,
+        },
+        "transactions": [
+            _serialize_transaction(row) for row in rows
+        ],
+    }
+
+
+@router.get("/{transaction_id}")
+def get_transaction(
+    transaction_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    One stored scored transaction by its transaction_id.
+    """
+
+    transaction = (
+        db.query(Transaction)
+        .filter(Transaction.transaction_id == transaction_id)
+        .first()
+    )
+
+    if transaction is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No transaction found for id {transaction_id}"
+            ),
+        )
+
+    return {
+        "message": "Transaction retrieved successfully.",
+        "transaction": _serialize_transaction(transaction),
     }

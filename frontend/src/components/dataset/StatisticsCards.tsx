@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Rows3, Columns3, AlertCircle, Copy, BadgeCheck } from "lucide-react";
+import { Rows3, Columns3, AlertCircle, Copy, BadgeCheck, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import type { DatasetInfo, ValidationReport } from "../../types/dataset";
 
 interface StatisticsCardsProps {

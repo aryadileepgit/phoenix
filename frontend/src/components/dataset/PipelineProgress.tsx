@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type StageStatus = "completed" | "running" | "pending";

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowRight, Rocket } from "lucide-react";
+import { ArrowRight, Rocket, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 
 interface FooterSummaryProps {
   completionPct: number;

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Database, FileText, Rows3, Columns3, BadgeCheck, Clock } from "lucide-react";
+import { Database, FileText, Rows3, Columns3, BadgeCheck, Clock, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import type { DatasetInfo } from "../../types/dataset";
 
 interface DatasetInfoCardProps {

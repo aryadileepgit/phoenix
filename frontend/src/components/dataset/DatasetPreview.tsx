@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Search, Table2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Table2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import type { DatasetPreviewRow } from "../../types/dataset";
 
 interface DatasetPreviewProps {

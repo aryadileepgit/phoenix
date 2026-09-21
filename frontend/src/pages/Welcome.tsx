@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ShieldCheck, DatabaseZap, TrendingUp, BrainCircuit, ArrowRight } from "lucide-react";
+import { ShieldCheck, DatabaseZap, TrendingUp, BrainCircuit, ArrowRight, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import { PhoenixLogo } from "../components/PhoenixLogo";
 
 const FEATURES = [
@@ -113,3 +113,5 @@ export function Welcome() {
     </div>
   );
 }
+
+export default Welcome;

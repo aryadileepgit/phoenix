@@ -1,6 +1,5 @@
 from typing import Any
 
-from app.services.gemini_schema_mapper import gemini_schema_mapper
 from app.services.schema_registry_service import schema_registry_service
 
 
@@ -17,6 +16,8 @@ class SchemaEvolutionService:
         "additional_data",
     }
 
+    # Kept for backwards compatibility; the live value comes
+    # from runtime_settings.get_min_confidence().
     MIN_CONFIDENCE = 0.70
 
     def normalize_transaction(
@@ -42,16 +43,25 @@ class SchemaEvolutionService:
 
         if unknown_fields:
 
-            gemini_result = gemini_schema_mapper.map_fields(
+            from app.services.gemini_schema_mapper import (
+                get_gemini_mapper,
+            )
+            from app.services.runtime_settings import (
+                get_min_confidence,
+            )
+
+            gemini_result = get_gemini_mapper().map_fields(
                 unknown_fields
             )
+
+            min_confidence = get_min_confidence()
 
             for mapping in gemini_result.mappings:
 
                 if mapping.canonical_field not in self.CANONICAL_FIELDS:
                     continue
 
-                if mapping.confidence < self.MIN_CONFIDENCE:
+                if mapping.confidence < min_confidence:
                     continue
 
                 schema_registry_service.save_mapping(

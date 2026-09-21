@@ -1,4 +1,4 @@
-import { Rows3, ListChecks, FolderOutput, SplitSquareHorizontal } from "lucide-react";
+import { Rows3, ListChecks, FolderOutput, SplitSquareHorizontal, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import { PipelineActionCard } from "./PipelineActionCard";
 import { StatTile } from "./StatTile";
 import { safeNumber, safeString } from "../../utils/format";

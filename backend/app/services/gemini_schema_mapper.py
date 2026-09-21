@@ -119,4 +119,20 @@ Determine the semantic mapping.
         )
 
 
-gemini_schema_mapper = GeminiSchemaMapper()
+_mapper_instance = None
+
+
+def get_gemini_mapper() -> GeminiSchemaMapper:
+    """
+    Lazy singleton. Importing this module must never crash the
+    API when GEMINI_API_KEY is missing; the error surfaces only
+    when AI mapping is actually requested, with a clear message
+    and registry/heuristic fallback available to callers.
+    """
+
+    global _mapper_instance
+
+    if _mapper_instance is None:
+        _mapper_instance = GeminiSchemaMapper()
+
+    return _mapper_instance

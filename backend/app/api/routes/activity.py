@@ -84,43 +84,38 @@ def get_recent_activity(
             })
 
         # --------------------------------------------------
-        # Batches of analyzed transactions
+        # Batches of scored transactions
         # --------------------------------------------------
         #
-        # Transactions uploaded together via one CSV all share the
-        # same dataset_id and near-identical created_at, so grouping
-        # by dataset + minute reconstructs "one analysis run".
+        # NOTE: Transaction has no dataset_id column, so batches
+        # are reconstructed by grouping scored rows into
+        # minute buckets on created_at.
+        # Transactions are API-scored rows (simulator/live),
+        # not the IEEE-CIS file dataset.
 
         minute_bucket = func.date_trunc("minute", Transaction.created_at)
 
         batch_rows = (
             db.query(
-                Transaction.dataset_id.label("dataset_id"),
                 minute_bucket.label("bucket"),
                 func.count(Transaction.id).label("total"),
                 func.sum(cast(Transaction.predicted_label, Integer)).label("fraud_total"),
                 func.max(Transaction.created_at).label("latest"),
             )
-            .group_by(Transaction.dataset_id, minute_bucket)
+            .group_by(minute_bucket)
             .order_by(desc("latest"))
             .limit(limit)
             .all()
         )
 
         for row in batch_rows:
-            dataset = (
-                db.query(Dataset)
-                .filter(Dataset.id == row.dataset_id)
-                .first()
-            )
-
             fraud_total = int(row.fraud_total or 0)
 
             events.append({
                 "type": "batch_analyzed",
                 "title": f"Fraud analysis completed — {row.total} transaction(s)",
                 "detail": (
-                    f"{dataset.dataset_name if dataset else 'Unknown dataset'} · "
+                    f"API-scored transactions · "
                     f"{fraud_total} flagged as fraud"
                 ),
                 "timestamp": row.latest,

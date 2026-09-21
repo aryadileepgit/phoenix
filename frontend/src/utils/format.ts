@@ -84,3 +84,8 @@ export function timeAgo(value: unknown): string {
 
   return date.toLocaleDateString();
 }
+
+/** Formats a number with locale separators (e.g., 1234 -> "1,234"). */
+export function formatNumber(value: number): string {
+  return new Intl.NumberFormat("en-US").format(value);
+}

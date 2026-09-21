@@ -8,8 +8,7 @@ from app.database.migrations import run_startup_migrations
 import app.models
 
 from app.api.auth import router as auth_router
-from app.api.dataset import router as dataset_router  
-from app.api import history
+from app.api.dataset import router as dataset_router
 from app.api.routes.transactions import router as transactions_router
 
 Base.metadata.create_all(bind=engine)
@@ -31,7 +30,25 @@ app.add_middleware(
 )
 
 # Routers
+# NOTE: app.api.history also defines GET /dataset/history but uses
+# wrong column names (upload_time/filename/rows) and is shadowed by
+# app.api.dataset's working handler. It is intentionally not mounted.
 app.include_router(auth_router)
 app.include_router(dataset_router)
-app.include_router(history.router)
 app.include_router(transactions_router)
+
+from app.api.routes.activity import router as activity_router
+from app.api.routes.schema import router as schema_router
+from app.api.routes.drift import router as drift_router
+from app.api.routes.adaptive import router as adaptive_router
+from app.api.routes.model import router as model_router
+from app.api.routes.settings import router as settings_router
+from app.api.routes.dashboard import router as dashboard_router
+
+app.include_router(activity_router)
+app.include_router(schema_router)
+app.include_router(drift_router)
+app.include_router(adaptive_router)
+app.include_router(model_router)
+app.include_router(settings_router)
+app.include_router(dashboard_router)

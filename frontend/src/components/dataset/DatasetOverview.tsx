@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Database, Hash, Rows3, Columns3, BadgeCheck, ShieldCheck, HardDrive, CalendarClock } from "lucide-react";
+import { Database, Hash, Rows3, Columns3, BadgeCheck, ShieldCheck, HardDrive, CalendarClock, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import { safeString, safeNumber, safeBytes, safeDate, safeUpper } from "../../utils/format";
 import type { DatasetInfo } from "../../types/dataset";
 

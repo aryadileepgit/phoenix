@@ -461,11 +461,17 @@ class FraudScoringService:
 
     def _risk_decision(self, probability):
 
-        if probability < 0.30:
+        from app.services.runtime_settings import (
+            get_thresholds,
+        )
+
+        verify_threshold, fraud_threshold = get_thresholds()
+
+        if probability < verify_threshold:
 
             return "LOW", "APPROVE"
 
-        elif probability < 0.70:
+        elif probability < fraud_threshold:
 
             return "MEDIUM", "VERIFY"
 

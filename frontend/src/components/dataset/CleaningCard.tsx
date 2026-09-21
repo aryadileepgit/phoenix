@@ -1,4 +1,4 @@
-import { Sparkles, Rows3, Copy, AlertTriangle, FileOutput } from "lucide-react";
+import { Sparkles, Rows3, Copy, AlertTriangle, FileOutput, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import { PipelineActionCard } from "./PipelineActionCard";
 import { StatTile } from "./StatTile";
 import { safeNumber, safeString } from "../../utils/format";

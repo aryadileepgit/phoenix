@@ -2,14 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../services/authService";
 import { motion } from "framer-motion";
-import {
-  Mail,
-  Lock,
-  Eye,
-  EyeOff,
-  ShieldCheck,
-  ArrowRight,
-} from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import { PhoenixLogo } from "../components/PhoenixLogo";
 
 interface LoginProps {
@@ -375,3 +368,5 @@ export function Login({ onLogin }: LoginProps) {
     </div>
   );
 }
+
+export default Login;
