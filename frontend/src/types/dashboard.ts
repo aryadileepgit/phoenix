@@ -59,5 +59,6 @@ export interface DashboardData {
   system: {
     schemaPendingMappings: number;
     lastRetraining: string | null;
+    retrainingActive: boolean;
   };
 }

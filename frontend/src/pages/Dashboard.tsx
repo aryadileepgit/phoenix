@@ -647,9 +647,11 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             icon={ShieldCheck}
             label="Last Retraining"
             value={
-              system.lastRetraining
-                ? new Date(system.lastRetraining).toLocaleString()
-                : "Never"
+              system.retrainingActive
+                ? "Running…"
+                : system.lastRetraining
+                  ? new Date(system.lastRetraining).toLocaleString()
+                  : "Never"
             }
             subLabel="Recorded runs only"
             iconColor="#3b82f6"

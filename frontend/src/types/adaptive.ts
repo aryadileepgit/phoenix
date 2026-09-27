@@ -57,6 +57,17 @@ export interface ModelEvaluation {
   roc_auc: number;
 }
 
+export interface WorkerStatus {
+  job_id: string;
+  action: string;
+  drift_event_id: string;
+  status: string;
+  progress: string;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
 export interface AdaptiveState {
   agent: AdaptiveAgent;
   latest_drift_event: DriftEventRef | null;
@@ -64,6 +75,7 @@ export interface AdaptiveState {
   q_table: QTableRow[];
   retraining_history: RetrainingRecord[];
   model_evaluation: ModelEvaluation | null;
+  worker: WorkerStatus | null;
 }
 
 export interface AdaptiveDecision {

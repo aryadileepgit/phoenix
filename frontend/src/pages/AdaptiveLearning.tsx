@@ -121,6 +121,20 @@ export function AdaptiveLearning({ onLogout }: { onLogout: () => void }) {
     loadData();
   }, [loadData]);
 
+  // While a background job is active, refresh state silently
+  // every 15s so progress completes without manual reloads.
+  useEffect(() => {
+    if (!data?.worker) {
+      return;
+    }
+    const timer = setInterval(() => {
+      getAdaptiveLearning()
+        .then(setData)
+        .catch(() => {});
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [data?.worker]);
+
   const handleDecide = async () => {
     setDeciding(true);
     setError(null);
@@ -408,6 +422,50 @@ export function AdaptiveLearning({ onLogout }: { onLogout: () => void }) {
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-card-border bg-card p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-100">
+              Background Worker
+            </h2>
+            <span
+              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                data.worker
+                  ? "border-warning/25 bg-warning/10 text-warning"
+                  : "border-success/25 bg-success/10 text-success"
+              }`}
+            >
+              {data.worker ? data.worker.status.toUpperCase() : "IDLE"}
+            </span>
+          </div>
+          {data.worker ? (
+            <div className="mt-4 space-y-2 text-xs">
+              <div className="flex items-center justify-between rounded-xl border border-card-border/70 bg-bg/40 px-4 py-2.5">
+                <span className="text-faint">Job / action</span>
+                <span className="font-mono text-slate-100">
+                  {data.worker.job_id} · {data.worker.action}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border border-card-border/70 bg-bg/40 px-4 py-2.5">
+                <Loader2 size={13} className="animate-spin text-warning" />
+                <span className="text-slate-300">
+                  {data.worker.progress}
+                </span>
+              </div>
+              <p className="text-[11px] text-faint">
+                Live scoring continues on the deployed model
+                meanwhile; this view refreshes automatically.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-4 text-xs text-faint">
+              No retraining job running. Jobs start only when a
+              drift run ends with drift detected, Q-learning
+              selects retraining, cooldown has passed, and no
+              other job is active.
+            </p>
           )}
         </div>
 

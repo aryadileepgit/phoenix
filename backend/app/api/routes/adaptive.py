@@ -33,6 +33,7 @@ from app.services.qlearning_service import (
     GAMMA,
     get_q_learning_action,
 )
+from app.services.retraining_worker import get_active_job
 
 
 router = APIRouter(
@@ -140,6 +141,7 @@ def get_state(db: Session = Depends(get_db)):
             if model_report
             else None
         ),
+        "worker": get_active_job(),
     }
 
 

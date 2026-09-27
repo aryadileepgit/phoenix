@@ -17,6 +17,7 @@ from app.models.model_report import ModelReport
 from app.models.retraining_history import RetrainingHistory
 from app.models.schema_registry import SchemaRegistry
 from app.models.transaction import Transaction
+from app.services.retraining_worker import get_active_job
 
 
 router = APIRouter(
@@ -166,6 +167,7 @@ def get_dashboard(db: Session = Depends(get_db)):
                 if retraining
                 else None
             ),
+            "retrainingActive": get_active_job() is not None,
         },
     }
 

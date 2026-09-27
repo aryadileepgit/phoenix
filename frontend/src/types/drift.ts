@@ -60,6 +60,14 @@ export interface DriftStatusResponse {
   fraud_rate_history: FraudRatePoint[];
 }
 
+export interface RetrainingGate {
+  triggered: boolean;
+  reason: string | null;
+  job_id: string | null;
+  action: string | null;
+  state?: string | null;
+}
+
 export interface DriftRunResult {
   drift_detected: boolean;
   ks_score: number;
@@ -71,4 +79,5 @@ export interface DriftRunResult {
   features: DriftFeature[];
   reference_size: number;
   recent_size: number;
+  retraining: RetrainingGate | null;
 }

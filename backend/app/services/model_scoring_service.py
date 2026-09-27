@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import math
+import threading
 
 import joblib
 import pandas as pd
@@ -22,6 +23,11 @@ PREPROCESSOR_PATH = Path(
 class FraudScoringService:
 
     def __init__(self):
+        self._lock = threading.RLock()
+        self._model_mtime = None
+        self._load_artifacts()
+
+    def _load_artifacts(self):
         self.model = joblib.load(MODEL_PATH)
         self.preprocessor = joblib.load(PREPROCESSOR_PATH)
 
@@ -31,15 +37,46 @@ class FraudScoringService:
         with open(MEDIANS_PATH, "r") as f:
             self.medians = json.load(f)
 
+        try:
+            self._model_mtime = MODEL_PATH.stat().st_mtime_ns
+        except OSError:
+            self._model_mtime = None
+
+    def reload_if_updated(self):
+        """
+        Hot-swap a newly promoted model without restarting the
+        API or consumer processes. Called on every score; the
+        stat call is cheap and the reload path takes the lock.
+        Returns True when a reload happened.
+        """
+
+        try:
+            current = MODEL_PATH.stat().st_mtime_ns
+        except OSError:
+            return False
+
+        if current == self._model_mtime:
+            return False
+
+        with self._lock:
+            if current == self._model_mtime:
+                return False
+            self._load_artifacts()
+
+        return True
+
     def score(self, transaction_data: dict):
 
-        df = self._build_features(transaction_data)
+        with self._lock:
+            self.reload_if_updated()
 
-        processed = self._preprocess(df)
+            df = self._build_features(transaction_data)
 
-        probability = float(
-            self.model.predict_proba(processed)[0][1]
-        )
+            processed = self._preprocess(df)
+
+            probability = float(
+                self.model.predict_proba(processed)[0][1]
+            )
 
         predicted_label = probability >= 0.5
 

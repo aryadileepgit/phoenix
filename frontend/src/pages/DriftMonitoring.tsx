@@ -137,10 +137,16 @@ export function DriftMonitoring({ onLogout }: { onLogout: () => void }) {
     setRunMessage(null);
     try {
       const result = await runDriftDetection();
+      const gate = result.retraining;
+      const gateText = gate
+        ? gate.triggered
+          ? ` Q-learning selected ${gate.action}: background retraining started (job ${gate.job_id}).`
+          : ` No retraining: ${gate.reason ?? gate.action ?? "gate rejected"}.`
+        : "";
       setRunMessage(
         result.drift_detected
-          ? `Drift detected (KS ${result.ks_score.toFixed(4)}, ${result.severity}). Persisted as event ${result.drift_event_id.slice(0, 8)}.`
-          : `No drift (KS ${result.ks_score.toFixed(4)} ≤ ${result.threshold}). Run persisted.`
+          ? `Drift detected (KS ${result.ks_score.toFixed(4)}, ${result.severity}). Persisted as event ${result.drift_event_id.slice(0, 8)}.${gateText}`
+          : `No drift (KS ${result.ks_score.toFixed(4)} ≤ ${result.threshold}). Run persisted.${gateText}`
       );
       await loadData();
     } catch (err) {
