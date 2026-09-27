@@ -11,6 +11,8 @@ from config import (
     TRANSACTION_SCORE_ENDPOINT,
     TRANSACTION_INTERVAL_SECONDS,
     ACCOUNT_HISTORY_FILE,
+    KAFKA_ENABLED,
+    KAFKA_TOPIC,
 )
 
 
@@ -267,7 +269,7 @@ def generate_transaction():
         timezone.utc
     ).isoformat()
 
-    return {
+    transaction = {
         "txn_id": transaction_id,
         "customer_account": account_id,
         "transaction_amount": amount,
@@ -286,32 +288,66 @@ def generate_transaction():
         ),
     }
 
+    # --------------------------------------------------
+    # Demo Suspicious Mode: calibrated, realistic
+    # IEEE-CIS patterns layered over normal traffic.
+    # The model (never this code) decides the outcome.
+    # --------------------------------------------------
+
+    try:
+
+        from demo_suspicious import maybe_apply_demo_pattern
+
+        transaction, _ = maybe_apply_demo_pattern(
+            transaction
+        )
+
+    except Exception:
+
+        pass
+
+    return transaction
+
 
 def update_account_history(
     transaction
 ):
 
-    account_id = transaction[
+    account_id = transaction.get(
         "customer_account"
-    ]
-
-    amount = float(
-        transaction[
-            "transaction_amount"
-        ]
     )
 
-    city = transaction[
-        "additional_data"
-    ]["city"]
+    if account_id not in account_history:
+        return
 
-    device_id = transaction[
-        "device_information"
-    ]["device_id"]
+    try:
+        amount = float(
+            transaction.get("transaction_amount", 0.0)
+        )
+    except (TypeError, ValueError):
+        return
+
+    additional_data = (
+        transaction.get("additional_data") or {}
+    )
+
+    device_information = (
+        transaction.get("device_information") or {}
+    )
 
     profile = account_history[
         account_id
     ]
+
+    city = (
+        additional_data.get("city")
+        or profile.get("usual_city")
+    )
+
+    device_id = (
+        device_information.get("device_id")
+        or profile.get("usual_device")
+    )
 
     old_count = profile[
         "transaction_count"
@@ -377,6 +413,68 @@ def send_transaction(transaction):
 
     try:
 
+        if KAFKA_ENABLED:
+
+            try:
+
+                from kafka_producer import publish_transaction
+
+                metadata = publish_transaction(transaction)
+
+                print()
+                print("=" * 60)
+                print(
+                    "QUEUED VIA KAFKA"
+                )
+                print("=" * 60)
+
+                print(
+                    "Transaction ID :",
+                    transaction["txn_id"],
+                )
+
+                print(
+                    "Account        :",
+                    transaction[
+                        "customer_account"
+                    ],
+                )
+
+                print(
+                    "Topic          :",
+                    f"{KAFKA_TOPIC} "
+                    f"(partition {metadata.partition}, "
+                    f"offset {metadata.offset})",
+                )
+
+                print(
+                    "Scenario       :",
+                    (transaction.get("additional_data") or {}).get(
+                        "scenario", "NORMAL"
+                    ),
+                )
+
+                print(
+                    "Scoring happens in the Phoenix "
+                    "Kafka consumer; watch the "
+                    "Transactions page."
+                )
+
+                update_account_history(
+                    transaction
+                )
+
+                return
+
+            except Exception as kafka_error:
+
+                print()
+                print(
+                    "Kafka unavailable "
+                    f"({kafka_error}); falling back "
+                    "to direct HTTP scoring."
+                )
+
         response = requests.post(
             TRANSACTION_SCORE_ENDPOINT,
             json=transaction,
@@ -436,16 +534,16 @@ def send_transaction(transaction):
 
         print(
             "Device         :",
-            transaction[
-                "device_information"
-            ]["device_id"],
+            (transaction.get("device_information") or {}).get(
+                "device_id", "—"
+            ),
         )
 
         print(
             "Location       :",
-            transaction[
-                "additional_data"
-            ]["city"],
+            (transaction.get("additional_data") or {}).get(
+                "city", "—"
+            ),
         )
 
         if response.ok:
@@ -534,19 +632,40 @@ def main():
         "Press Ctrl+C to stop."
     )
 
-    while True:
+    try:
 
-        transaction = (
-            generate_transaction()
-        )
+        while True:
 
-        send_transaction(
-            transaction
-        )
+            transaction = (
+                generate_transaction()
+            )
 
-        time.sleep(
-            TRANSACTION_INTERVAL_SECONDS
-        )
+            send_transaction(
+                transaction
+            )
+
+            time.sleep(
+                TRANSACTION_INTERVAL_SECONDS
+            )
+
+    except KeyboardInterrupt:
+
+        print()
+        print("Stopping simulator.")
+
+    finally:
+
+        if KAFKA_ENABLED:
+
+            try:
+
+                from kafka_producer import close_producer
+
+                close_producer()
+
+            except Exception:
+
+                pass
 
 
 if __name__ == "__main__":

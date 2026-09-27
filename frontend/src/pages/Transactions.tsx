@@ -191,31 +191,52 @@ export function Transactions({ onLogout }: { onLogout: () => void }) {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getTransactions({
-        prediction,
-        search: debouncedSearch || undefined,
-        limit: 500,
-      });
-      setSummary(data.summary);
-      setTransactions(data.transactions);
-      setPage(1);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load transactions."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [prediction, debouncedSearch]);
+  const load = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!options?.silent) {
+        setLoading(true);
+      }
+      setError(null);
+      try {
+        const data = await getTransactions({
+          prediction,
+          search: debouncedSearch || undefined,
+          limit: 500,
+        });
+        setSummary(data.summary);
+        setTransactions(data.transactions);
+        if (!options?.silent) {
+          setPage(1);
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load transactions."
+        );
+      } finally {
+        if (!options?.silent) {
+          setLoading(false);
+        }
+      }
+    },
+    [prediction, debouncedSearch]
+  );
 
   useEffect(() => {
     load();
+  }, [load]);
+
+  // Live view: silently refresh scored rows every 10s so
+  // Kafka-consumed transactions appear without a manual
+  // refresh. Filter, search, and pagination state is kept.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        load({ silent: true });
+      }
+    }, 10000);
+    return () => clearInterval(timer);
   }, [load]);
 
   // Advanced filters apply client-side over the fetched page
@@ -366,7 +387,7 @@ export function Transactions({ onLogout }: { onLogout: () => void }) {
 
             <button
               type="button"
-              onClick={load}
+              onClick={() => load()}
               disabled={loading}
               className="flex items-center gap-1.5 rounded-lg border border-card-border bg-card px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:border-primary/50 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -605,7 +626,7 @@ export function Transactions({ onLogout }: { onLogout: () => void }) {
         {showScoreDialog && (
           <ScoreDialog
             onClose={() => setShowScoreDialog(false)}
-            onScored={load}
+            onScored={() => load()}
           />
         )}
       </AnimatePresence>
