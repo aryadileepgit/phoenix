@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.database.dependencies import get_db
 from app.models.drift_event import DriftEvent
 from app.models.model_report import ModelReport
+from app.models.transaction import Transaction
 from app.models.qlearning_state import QLearningState
 from app.models.retraining_history import RetrainingHistory
 from app.services import qlearning_service
@@ -33,7 +34,10 @@ from app.services.qlearning_service import (
     GAMMA,
     get_q_learning_action,
 )
-from app.services.retraining_worker import get_active_job
+from app.services.retraining_worker import (
+    get_active_job,
+    list_recent_jobs,
+)
 
 
 router = APIRouter(
@@ -141,7 +145,43 @@ def get_state(db: Session = Depends(get_db)):
             if model_report
             else None
         ),
-        "worker": get_active_job(),
+        "worker": get_active_job(db),
+        "recent_jobs": list_recent_jobs(db),
+        "label_stats": _label_stats(db),
+    }
+
+
+def _label_stats(db: Session):
+    """
+    Analyst ground-truth inventory for RETRAIN_RECENT
+    eligibility. Counts distinct labeled transactions only;
+    unlabeled rows are never treated as ground truth.
+    """
+
+    from app.services.retraining_worker import MIN_LABELED_RECENT
+
+    labeled_total = (
+        db.query(Transaction)
+        .filter(Transaction.actual_label != None)  # noqa: E711
+        .count()
+    )
+    confirmed_fraud = (
+        db.query(Transaction)
+        .filter(Transaction.actual_label == True)  # noqa: E712
+        .count()
+    )
+    confirmed_legitimate = (
+        db.query(Transaction)
+        .filter(Transaction.actual_label == False)  # noqa: E712
+        .count()
+    )
+
+    return {
+        "labeled_total": labeled_total,
+        "confirmed_fraud": confirmed_fraud,
+        "confirmed_legitimate": confirmed_legitimate,
+        "min_required": MIN_LABELED_RECENT,
+        "eligible": labeled_total >= MIN_LABELED_RECENT,
     }
 
 

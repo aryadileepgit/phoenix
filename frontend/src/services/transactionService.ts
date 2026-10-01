@@ -7,6 +7,8 @@ import type {
   TransactionListFilters,
   ScoreTransactionInput,
   ScoreTransactionResult,
+  ReviewInput,
+  TransactionReviewSummary,
 } from "../types/transaction";
 
 export interface TransactionListResult {
@@ -79,6 +81,57 @@ export async function getTransactionById(
         `/transactions/${encodeURIComponent(id)}`
       );
     return response.data.transaction;
+  } catch (err) {
+    throw new Error(extractErrorMessage(err));
+  }
+}
+
+/**
+ * ==========================================================
+ * ANALYST REVIEW (ground truth)
+ * ==========================================================
+ *
+ * Backend endpoints:
+ * POST /transactions/{transaction_id}/review
+ * GET  /transactions/{transaction_id}/reviews
+ *
+ * Records a human verdict and mirrors it onto actual_label.
+ * The model outputs are never modified by reviews.
+ */
+export async function submitReview(
+  id: string,
+  input: ReviewInput
+): Promise<{
+  message: string;
+  transaction: TransactionRecord;
+  review: TransactionReviewSummary;
+}> {
+  try {
+    const response = await apiClient.post<{
+      message: string;
+      transaction: TransactionRecord;
+      review: TransactionReviewSummary;
+    }>(`/transactions/${encodeURIComponent(id)}/review`, input);
+    return response.data;
+  } catch (err) {
+    throw new Error(extractErrorMessage(err));
+  }
+}
+
+export async function getReviews(
+  id: string
+): Promise<{
+  transaction_id: string;
+  review_count: number;
+  reviews: TransactionReviewSummary[];
+}> {
+  try {
+    const response = await apiClient.get<{
+      transaction_id: string;
+      review_count: number;
+      reviews: TransactionReviewSummary[];
+    }>(`/transactions/${encodeURIComponent(id)}/reviews`);
+    return response.data;
   } catch (err) {
     throw new Error(extractErrorMessage(err));
   }

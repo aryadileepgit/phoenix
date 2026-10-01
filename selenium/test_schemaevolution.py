@@ -10,7 +10,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
-class TestLogout():
+class TestSchemaevolution():
   def setup_method(self, method):
     self.driver = webdriver.Chrome()
     self.vars = {}
@@ -18,9 +18,8 @@ class TestLogout():
   def teardown_method(self, method):
     self.driver.quit()
   
-  def test_logout(self):
-    self.driver.get("http://localhost:5173/dashboard")
+  def test_schemaevolution(self):
+    self.driver.get("http://localhost:5173/schema-registry")
     self.driver.set_window_size(1296, 688)
-    self.driver.find_element(By.CSS_SELECTOR, ".hover\\3A bg-danger\\/10").click()
-    self.driver.execute_script("window.scrollTo(0,0)")
+    self.driver.execute_script("window.scrollTo(0,1)")
   

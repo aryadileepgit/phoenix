@@ -167,7 +167,7 @@ def get_dashboard(db: Session = Depends(get_db)):
                 if retraining
                 else None
             ),
-            "retrainingActive": get_active_job() is not None,
+            "retrainingActive": get_active_job(db) is not None,
         },
     }
 

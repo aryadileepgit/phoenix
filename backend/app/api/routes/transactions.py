@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from pydantic import ValidationError
-from sqlalchemy import case, func
+from pydantic import BaseModel, Field, StrictBool, ValidationError
+from sqlalchemy import case, desc, func
 from sqlalchemy.orm import Session
 
 from app.database.database import SessionLocal
 from app.models.transaction import Transaction
+from app.models.transaction_review import TransactionReview
 from app.schemas.transaction import (
     TransactionCreate,
     TransactionResponse,
@@ -576,16 +577,30 @@ def investigate_account(
     }
 
 
+# Boolean presence flags (card_present, device_known) are
+# near-universal per-row states, not identity evidence: staged
+# data shows card_present=True on 1424/1449 rows, which linked
+# every account to every other account. They are excluded so
+# only genuinely discriminating shared values form edges.
+NON_RELATIONSHIP_FIELDS = frozenset(
+    {"card_present", "device_known"}
+)
+
+
 def extract_relationship_attributes(transaction):
     attributes = {}
 
     if isinstance(transaction.card_information, dict):
         for key, value in transaction.card_information.items():
+            if key in NON_RELATIONSHIP_FIELDS:
+                continue
             if value is not None and str(value).strip():
                 attributes[f"card:{key}"] = str(value).strip()
 
     if isinstance(transaction.device_information, dict):
         for key, value in transaction.device_information.items():
+            if key in NON_RELATIONSHIP_FIELDS:
+                continue
             if value is not None and str(value).strip():
                 attributes[f"device:{key}"] = str(value).strip()
 
@@ -771,14 +786,19 @@ def get_account_network(
     }
 
 
-def _serialize_transaction(transaction):
+def _serialize_transaction(transaction, db=None, with_review=False):
     """
     Stored-row serialization for list/detail responses.
     Field names match the Transaction model and the
     TransactionResponse schema (snake_case).
+
+    With with_review=True (detail views only, never the list
+    to avoid N+1 queries), attaches the latest analyst
+    verdict and the total review count. Review data never
+    alters the stored model outputs.
     """
 
-    return {
+    payload = {
         "id": str(transaction.id),
         "transaction_id": transaction.transaction_id,
         "account_id": transaction.account_id,
@@ -799,6 +819,22 @@ def _serialize_transaction(transaction):
         "actual_label": transaction.actual_label,
         "created_at": transaction.created_at,
     }
+
+    if with_review and db is not None:
+        latest = _latest_review(db, transaction)
+        payload["review"] = _serialize_review(latest)
+        payload["review_count"] = (
+            db.query(TransactionReview)
+            .filter(
+                TransactionReview.transaction_id == transaction.id
+            )
+            .count()
+        )
+    else:
+        payload["review"] = None
+        payload["review_count"] = 0
+
+    return payload
 
 
 @router.get("")
@@ -909,5 +945,141 @@ def get_transaction(
 
     return {
         "message": "Transaction retrieved successfully.",
-        "transaction": _serialize_transaction(transaction),
+        "transaction": _serialize_transaction(
+            transaction, db=db, with_review=True
+        ),
+    }
+
+
+def _serialize_review(review):
+    if review is None:
+        return None
+
+    return {
+        "id": str(review.id),
+        "actual_label": bool(review.actual_label),
+        "reviewer": review.reviewer,
+        "source": review.source,
+        "notes": review.notes,
+        "reviewed_at": review.reviewed_at,
+    }
+
+
+def _latest_review(db: Session, transaction):
+    return (
+        db.query(TransactionReview)
+        .filter(
+            TransactionReview.transaction_id == transaction.id
+        )
+        .order_by(desc(TransactionReview.reviewed_at))
+        .first()
+    )
+
+
+class ReviewSubmit(BaseModel):
+    # StrictBool: 0/1/"true" are rejected; only real booleans.
+    # The label always comes from a human reviewer, never from
+    # predicted_label and never generated.
+    actual_label: StrictBool
+    reviewer: str = Field(min_length=1, max_length=100)
+    source: str = Field(default="analyst_ui", pattern="^(analyst_ui|api)$")
+    notes: str | None = Field(default=None, max_length=500)
+
+
+@router.get("/{transaction_id}/reviews")
+def list_reviews(
+    transaction_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Full analyst verdict history for one transaction, newest
+    first. Empty list when never reviewed.
+    """
+
+    transaction = (
+        db.query(Transaction)
+        .filter(Transaction.transaction_id == transaction_id)
+        .first()
+    )
+
+    if transaction is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No transaction found for id {transaction_id}"
+            ),
+        )
+
+    reviews = (
+        db.query(TransactionReview)
+        .filter(
+            TransactionReview.transaction_id == transaction.id
+        )
+        .order_by(desc(TransactionReview.reviewed_at))
+        .all()
+    )
+
+    return {
+        "transaction_id": transaction_id,
+        "review_count": len(reviews),
+        "reviews": [_serialize_review(r) for r in reviews],
+    }
+
+
+@router.post("/{transaction_id}/review")
+def submit_review(
+    transaction_id: str,
+    payload: ReviewSubmit,
+    db: Session = Depends(get_db),
+):
+    """
+    Record an analyst ground-truth verdict. Appends an audit
+    row and mirrors the latest verdict onto
+    Transaction.actual_label for queries and display. The
+    model's own predicted_label, fraud_probability,
+    risk_level, and decision are never modified.
+    """
+
+    transaction = (
+        db.query(Transaction)
+        .filter(Transaction.transaction_id == transaction_id)
+        .first()
+    )
+
+    if transaction is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No transaction found for id {transaction_id}"
+            ),
+        )
+
+    review = TransactionReview(
+        transaction_id=transaction.id,
+        actual_label=bool(payload.actual_label),
+        reviewer=payload.reviewer.strip(),
+        source=payload.source,
+        notes=(
+            payload.notes.strip()
+            if payload.notes and payload.notes.strip()
+            else None
+        ),
+    )
+    db.add(review)
+
+    transaction.actual_label = bool(payload.actual_label)
+
+    db.commit()
+    db.refresh(review)
+    db.refresh(transaction)
+
+    return {
+        "message": (
+            "Analyst verdict recorded as "
+            f"{'Confirmed Fraud' if review.actual_label else 'Confirmed Legitimate'}."
+        ),
+        "transaction": _serialize_transaction(
+            transaction, db=db, with_review=True
+        ),
+        "review": _serialize_review(review),
     }

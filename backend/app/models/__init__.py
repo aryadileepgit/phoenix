@@ -6,6 +6,8 @@ from .prediction import Prediction
 from .schema_registry import SchemaRegistry
 from .drift_event import DriftEvent
 from .retraining_history import RetrainingHistory
+from .transaction_review import TransactionReview
+from .retraining_job import RetrainingJob
 from .activity_log import ActivityLog
 from .dataset_validation import DatasetValidation
 from .dataset_cleaning import DatasetCleaning

@@ -428,6 +428,58 @@ export function AdaptiveLearning({ onLogout }: { onLogout: () => void }) {
         <div className="rounded-2xl border border-card-border bg-card p-5">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-100">
+              Supervised Ground Truth
+            </h2>
+            <span
+              className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                data.label_stats.eligible
+                  ? "border-success/25 bg-success/10 text-success"
+                  : "border-warning/25 bg-warning/10 text-warning"
+              }`}
+            >
+              {data.label_stats.eligible
+                ? "RETRAIN_ELIGIBLE"
+                : "NOT ELIGIBLE"}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-faint">
+            Distinct analyst-verified transactions only.
+            Unlabeled rows are never ground truth. RETRAIN_RECENT
+            requires {data.label_stats.min_required} labeled rows.
+          </p>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl border border-card-border/70 bg-bg/40 p-3">
+              <p className="text-[10px] text-faint">Labeled Total</p>
+              <p className="mt-1 text-lg font-bold text-slate-100">
+                {formatNumber(data.label_stats.labeled_total)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-card-border/70 bg-bg/40 p-3">
+              <p className="text-[10px] text-faint">Confirmed Fraud</p>
+              <p className="mt-1 text-lg font-bold text-danger">
+                {formatNumber(data.label_stats.confirmed_fraud)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-card-border/70 bg-bg/40 p-3">
+              <p className="text-[10px] text-faint">
+                Confirmed Legitimate
+              </p>
+              <p className="mt-1 text-lg font-bold text-success">
+                {formatNumber(data.label_stats.confirmed_legitimate)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-card-border/70 bg-bg/40 p-3">
+              <p className="text-[10px] text-faint">Minimum Required</p>
+              <p className="mt-1 text-lg font-bold text-slate-100">
+                {formatNumber(data.label_stats.min_required)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-card-border bg-card p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-100">
               Background Worker
             </h2>
             <span
@@ -466,6 +518,63 @@ export function AdaptiveLearning({ onLogout }: { onLogout: () => void }) {
               selects retraining, cooldown has passed, and no
               other job is active.
             </p>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-card-border bg-card p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-100">
+              Recent Jobs (durable record)
+            </h2>
+            <span className="rounded-lg border border-card-border px-2.5 py-1 text-xs text-muted">
+              {data.recent_jobs.length} jobs
+            </span>
+          </div>
+          {data.recent_jobs.length === 0 ? (
+            <p className="mt-4 text-xs text-faint">
+              No retraining jobs have ever been queued —
+              including failed ones. Failures are recorded here
+              with their error, never hidden.
+            </p>
+          ) : (
+            <div className="mt-4 space-y-2">
+              {data.recent_jobs.map((job) => (
+                <div
+                  key={job.job_id}
+                  className="rounded-xl border border-card-border/70 bg-bg/40 px-4 py-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-[11px] text-slate-200">
+                      {job.job_id} · {job.action}
+                    </span>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                        job.status === "succeeded"
+                          ? "border-success/25 bg-success/10 text-success"
+                          : job.status === "failed"
+                            ? "border-danger/25 bg-danger/10 text-danger"
+                            : "border-warning/25 bg-warning/10 text-warning"
+                      }`}
+                    >
+                      {job.status.toUpperCase()}
+                    </span>
+                  </div>
+                  {job.error && (
+                    <p className="mt-1.5 break-words font-mono text-[10px] text-danger/90">
+                      {job.error.slice(0, 300)}
+                    </p>
+                  )}
+                  <p className="mt-1 text-[10px] text-faint">
+                    {job.started_at
+                      ? new Date(job.started_at).toLocaleString()
+                      : "not started"}
+                    {job.finished_at
+                      ? ` → ${new Date(job.finished_at).toLocaleString()}`
+                      : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 

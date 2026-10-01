@@ -502,12 +502,38 @@ export function NetworkAnalysis({ onLogout }: { onLogout: () => void }) {
           </button>
         </div>
 
-        <p className="text-xs text-slate-500">
-          Nodes are shared attributes observed on stored
-          transactions (card, device, email, address). Shared
-          attributes are investigation signals, not proof of
-          fraud.
-        </p>
+        <div className="rounded-xl border border-card-border bg-card p-4 text-xs text-slate-500">
+          <p className="font-semibold text-slate-300">
+            How to read this graph
+          </p>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5">
+            <li>
+              <span className="font-mono text-slate-300">
+                Transaction ID
+              </span>{" "}
+              (e.g. SIM_*, PHX_*) — the dataset/ingest
+              identifier of one scored row.
+            </li>
+            <li>
+              <span className="font-mono text-slate-300">
+                Account
+              </span>{" "}
+              — API-supplied grouping key from scored
+              transactions (e.g. simulator ACC_* IDs).
+              IEEE-CIS has no native customer/account ID, so
+              this is a proxy, not a bank customer record.
+            </li>
+            <li>
+              <span className="font-mono text-slate-300">
+                Attribute
+              </span>{" "}
+              — an exact shared card/device/email/address
+              value observed on stored rows (boolean flags
+              excluded). Shared attributes are investigation
+              signals, not proof of fraud.
+            </li>
+          </ul>
+        </div>
 
         {error && (
           <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">

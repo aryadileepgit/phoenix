@@ -3,8 +3,9 @@ import type { ModelPerformanceData } from "../types/modelPerformance";
 
 /**
  * Backend: GET /model/performance — latest stored ModelReport
- * plus training metadata. Precision-recall data was never
- * stored, so pr_auc/pr_curve are explicit nulls.
+ * plus training metadata. pr_auc/pr_curve come from
+ * model_metadata.json (stored at promotion, backfilled for
+ * older models); null when never recorded.
  */
 export async function getModelPerformance(): Promise<ModelPerformanceData> {
   try {

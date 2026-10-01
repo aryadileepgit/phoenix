@@ -78,6 +78,32 @@ function TriageBadge({ status }: { status: string }) {
   );
 }
 
+function VerifiedBadge({
+  actualLabel,
+}: {
+  actualLabel: boolean | null;
+}) {
+  if (actualLabel === true) {
+    return (
+      <span className="whitespace-nowrap rounded-full border border-danger/25 bg-danger/10 px-2 py-0.5 text-[10px] font-semibold text-danger">
+        Confirmed Fraud
+      </span>
+    );
+  }
+  if (actualLabel === false) {
+    return (
+      <span className="whitespace-nowrap rounded-full border border-success/25 bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">
+        Confirmed Legit
+      </span>
+    );
+  }
+  return (
+    <span className="whitespace-nowrap rounded-full border border-card-border px-2 py-0.5 text-[10px] font-semibold text-faint">
+      Unreviewed
+    </span>
+  );
+}
+
 function LoadingSkeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse ${className}`} />;
 }
@@ -508,6 +534,38 @@ export function Investigation({ onLogout }: { onLogout: () => void }) {
                           {f}
                         </p>
                       ))}
+                    </div>
+                  )}
+                  {detail.suspicious_transactions.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-faint">
+                        Suspicious transactions · verified status
+                      </p>
+                      <div className="max-h-48 space-y-1.5 overflow-y-auto">
+                        {detail.suspicious_transactions
+                          .slice(0, 12)
+                          .map((t) => (
+                            <button
+                              key={t.transaction_id}
+                              type="button"
+                              onClick={() =>
+                                navigate(
+                                  `/transactions/${encodeURIComponent(
+                                    t.transaction_id
+                                  )}`
+                                )
+                              }
+                              className="flex w-full items-center justify-between gap-2 rounded-lg border border-card-border/70 bg-bg/40 px-3 py-2 text-left transition-colors hover:border-primary/50"
+                            >
+                              <span className="truncate font-mono text-[11px] text-slate-300">
+                                {t.transaction_id}
+                              </span>
+                              <VerifiedBadge
+                                actualLabel={t.actual_label}
+                              />
+                            </button>
+                          ))}
+                      </div>
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2 pt-1">

@@ -68,6 +68,25 @@ export interface WorkerStatus {
   finished_at: string | null;
 }
 
+export interface JobRecord {
+  job_id: string;
+  action: string;
+  drift_event_id: string | null;
+  status: string;
+  progress: string | null;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface LabelStats {
+  labeled_total: number;
+  confirmed_fraud: number;
+  confirmed_legitimate: number;
+  min_required: number;
+  eligible: boolean;
+}
+
 export interface AdaptiveState {
   agent: AdaptiveAgent;
   latest_drift_event: DriftEventRef | null;
@@ -76,6 +95,8 @@ export interface AdaptiveState {
   retraining_history: RetrainingRecord[];
   model_evaluation: ModelEvaluation | null;
   worker: WorkerStatus | null;
+  recent_jobs: JobRecord[];
+  label_stats: LabelStats;
 }
 
 export interface AdaptiveDecision {

@@ -35,6 +35,7 @@ import {
   explainTransaction,
 } from "../services/transactionDetailService";
 import { getAccountHistory } from "../services/accountsService";
+import { submitReview } from "../services/transactionService";
 import { getTrainedModel } from "../services/datasetOverviewService";
 import { safeDate } from "../utils/format";
 import type {
@@ -220,6 +221,16 @@ export function TransactionDetails({ onLogout }: { onLogout: () => void }) {
   const [modelName, setModelName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reviewer, setReviewer] = useState<string>(() => {
+    try {
+      return localStorage.getItem("phoenix_reviewer") ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewNotice, setReviewNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!transactionId) {
@@ -277,6 +288,42 @@ export function TransactionDetails({ onLogout }: { onLogout: () => void }) {
     };
     fetchData();
   }, [transactionId]);
+
+  const handleReview = async (actualLabel: boolean) => {
+    if (!transaction || reviewing) {
+      return;
+    }
+    const name = reviewer.trim();
+    if (!name) {
+      setReviewError(
+        "Enter your reviewer name/initials so the verdict is attributable."
+      );
+      return;
+    }
+    setReviewing(true);
+    setReviewError(null);
+    setReviewNotice(null);
+    try {
+      try {
+        localStorage.setItem("phoenix_reviewer", name);
+      } catch {
+        // non-fatal
+      }
+      const result = await submitReview(transaction.transaction_id, {
+        actual_label: actualLabel,
+        reviewer: name,
+        source: "analyst_ui",
+      });
+      setTransaction(result.transaction);
+      setReviewNotice(result.message);
+    } catch (err) {
+      setReviewError(
+        err instanceof Error ? err.message : "Failed to record verdict."
+      );
+    } finally {
+      setReviewing(false);
+    }
+  };
 
   const topbar = {
     title: "Transaction Details",
@@ -540,6 +587,113 @@ export function TransactionDetails({ onLogout }: { onLogout: () => void }) {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Analyst Review (ground truth) */}
+        <div className="rounded-2xl border border-card-border bg-card p-5">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={16} className="text-primary" />
+            <h2 className="text-sm font-semibold text-slate-100">
+              Analyst Review
+            </h2>
+            <span className="ml-auto rounded-full border border-card-border px-2 py-0.5 text-[10px] font-medium text-slate-400">
+              {txn.review
+                ? txn.actual_label === true
+                  ? "CONFIRMED FRAUD"
+                  : "CONFIRMED LEGITIMATE"
+                : "UNREVIEWED"}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-faint">
+            A human verdict here sets ground truth for future
+            retraining. It never changes the stored model
+            prediction above.
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-card-border/70 bg-bg/40 p-4">
+              <p className="text-[10px] text-faint">
+                Model predicted
+              </p>
+              <p
+                className={`mt-1 text-lg font-bold ${
+                  txn.predicted_label === true
+                    ? "text-danger"
+                    : "text-success"
+                }`}
+              >
+                {txn.predicted_label === true
+                  ? "Fraud"
+                  : txn.predicted_label === false
+                    ? "Legitimate"
+                    : "—"}{" "}
+                <span className="font-mono text-xs font-medium text-faint">
+                  {formatPercentage(txn.fraud_probability)}
+                </span>
+              </p>
+            </div>
+            <div className="rounded-xl border border-card-border/70 bg-bg/40 p-4">
+              <p className="text-[10px] text-faint">
+                Analyst verified
+              </p>
+              <p className="mt-1 text-lg font-bold text-slate-100">
+                {txn.review
+                  ? txn.actual_label === true
+                    ? "Fraud"
+                    : "Legitimate"
+                  : "—"}
+              </p>
+              {txn.review && (
+                <p className="mt-0.5 text-[11px] text-faint">
+                  by {txn.review.reviewer} ·{" "}
+                  {new Date(txn.review.reviewed_at).toLocaleString()}
+                  {txn.review_count != null &&
+                    txn.review_count > 1 &&
+                    ` · ${txn.review_count} verdicts total`}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {reviewNotice && (
+            <div className="mt-4 rounded-xl border border-success/25 bg-success/10 px-4 py-3 text-xs font-medium text-success">
+              {reviewNotice}
+            </div>
+          )}
+          {reviewError && (
+            <div className="mt-4 rounded-xl border border-danger/25 bg-danger/10 px-4 py-3 text-xs font-medium text-danger">
+              {reviewError}
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <input
+              type="text"
+              value={reviewer}
+              onChange={(e) => setReviewer(e.target.value)}
+              placeholder="Reviewer name / initials (required)"
+              maxLength={100}
+              className="min-w-[220px] flex-1 rounded-xl border border-card-border bg-bg/60 px-4 py-2.5 text-sm text-slate-200 outline-none transition-colors placeholder:text-faint focus:border-primary focus:ring-2 focus:ring-primary/25"
+            />
+            <button
+              type="button"
+              onClick={() => handleReview(true)}
+              disabled={reviewing}
+              className="flex items-center gap-1.5 rounded-xl bg-danger px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-danger/80 disabled:opacity-50"
+            >
+              <ShieldAlert size={15} />
+              {reviewing ? "Saving..." : "Confirm Fraud"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleReview(false)}
+              disabled={reviewing}
+              className="flex items-center gap-1.5 rounded-xl bg-success px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-success/80 disabled:opacity-50"
+            >
+              <ShieldCheck size={15} />
+              {reviewing ? "Saving..." : "Confirm Legitimate"}
+            </button>
           </div>
         </div>
 

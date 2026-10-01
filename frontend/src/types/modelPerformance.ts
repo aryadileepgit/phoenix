@@ -1,7 +1,8 @@
 /**
  * Mirrors backend/app/api/routes/model.py.
- * pr_auc/pr_curve are null: the training pipeline never stored
- * precision-recall data, and Phoenix does not fabricate curves.
+ * pr_auc/pr_curve come from model_metadata.json: stored at
+ * retraining promotion time, backfilled for older models on the
+ * untouched IEEE test set. Null when never recorded.
  */
 export interface ModelInfo {
   model_name: string;
@@ -30,6 +31,13 @@ export interface RocCurve {
   thresholds: number[];
 }
 
+export interface PrCurve {
+  precision: number[];
+  recall: number[];
+  thresholds: number[];
+  note?: string;
+}
+
 export interface ConfusionMatrix {
   labels: string[];
   matrix: number[][];
@@ -40,11 +48,18 @@ export interface FeatureImportanceItem {
   importance: number;
 }
 
+export interface PreviousVersion {
+  version: string;
+  status: string;
+  roc_auc: number;
+}
+
 export interface ModelPerformanceData {
   model_info: ModelInfo;
   metrics: ModelMetrics;
   roc_curve: RocCurve | null;
-  pr_curve: null;
+  pr_curve: PrCurve | null;
   confusion_matrix: ConfusionMatrix | null;
   feature_importance: FeatureImportanceItem[] | null;
+  previous_version: PreviousVersion | null;
 }

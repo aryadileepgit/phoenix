@@ -167,7 +167,8 @@ export function ModelPerformance({ onLogout }: { onLogout: () => void }) {
     );
   }
 
-  const { model_info, metrics, roc_curve, confusion_matrix } = data;
+  const { model_info, metrics, roc_curve, pr_curve, confusion_matrix } =
+    data;
 
   const rocPoints =
     roc_curve !== null
@@ -175,6 +176,17 @@ export function ModelPerformance({ onLogout }: { onLogout: () => void }) {
           fpr,
           tpr: roc_curve.tpr[Math.min(i, roc_curve.tpr.length - 1)] ?? 0,
         })).filter((_, i, arr) => i % Math.ceil(arr.length / 300) === 0)
+      : [];
+
+  const prPoints =
+    pr_curve !== null
+      ? pr_curve.recall.map((recall, i) => ({
+          recall,
+          precision:
+            pr_curve.precision[
+              Math.min(i, pr_curve.precision.length - 1)
+            ] ?? 0,
+        }))
       : [];
 
   const cm = confusion_matrix?.matrix ?? null;
@@ -218,7 +230,7 @@ export function ModelPerformance({ onLogout }: { onLogout: () => void }) {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <StatCard
             icon={Target}
             label="Accuracy"
@@ -248,6 +260,17 @@ export function ModelPerformance({ onLogout }: { onLogout: () => void }) {
             label="ROC-AUC"
             value={formatPercentage(metrics.roc_auc)}
             iconColor="#2563eb"
+          />
+          <StatCard
+            icon={TrendingUp}
+            label="PR-AUC"
+            value={
+              metrics.pr_auc !== null &&
+              metrics.pr_auc !== undefined
+                ? formatPercentage(metrics.pr_auc)
+                : "—"
+            }
+            iconColor="#a855f7"
           />
         </div>
 
@@ -329,19 +352,89 @@ export function ModelPerformance({ onLogout }: { onLogout: () => void }) {
           </div>
 
           <div className="rounded-2xl border border-slate-600/50 bg-card p-5">
-            <h2 className="text-sm font-semibold text-slate-100">
-              Precision-Recall
-            </h2>
-            <div className="flex h-80 flex-col items-center justify-center gap-2 text-center">
-              <AlertCircle size={20} className="text-faint" />
-              <p className="text-xs text-faint">
-                Not stored by the training pipeline.
-              </p>
-              <p className="max-w-xs text-[11px] text-faint">
-                Phoenix does not fabricate a PR curve. Only the
-                stored ROC curve, confusion matrix, and feature
-                importance are shown.
-              </p>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-100">
+                Precision-Recall (stored)
+              </h2>
+              {metrics.pr_auc !== null &&
+              metrics.pr_auc !== undefined ? (
+                <span className="rounded-lg border border-card-border px-2.5 py-1 text-xs text-muted">
+                  AP: {formatPercentage(metrics.pr_auc)}
+                </span>
+              ) : null}
+            </div>
+            <div className="h-80">
+              {prPoints.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={prPoints}
+                    margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+                  >
+                    <CartesianGrid stroke="#27344A" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="recall"
+                      domain={[0, 1]}
+                      tick={{ fill: "#64748B", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      label={{
+                        value: "Recall",
+                        position: "insideBottom",
+                        offset: -10,
+                        fill: "#64748B",
+                        fontSize: 12,
+                      }}
+                    />
+                    <YAxis
+                      dataKey="precision"
+                      domain={[0, 1]}
+                      tick={{ fill: "#64748B", fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      label={{
+                        value: "Precision",
+                        angle: -90,
+                        position: "insideLeft",
+                        offset: 20,
+                        fill: "#64748B",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: "#1e293b",
+                        border: "1px solid #27344a",
+                        fontSize: 12,
+                      }}
+                      labelStyle={{ color: "#e2e8f0" }}
+                      formatter={(value: any, name: any) => [
+                        Number(value).toFixed(4),
+                        name === "precision" ? "Precision" : "Recall",
+                      ]}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="precision"
+                      stroke="#a855f7"
+                      strokeWidth={2.5}
+                      dot={false}
+                      activeDot={{ r: 5 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-80 flex-col items-center justify-center gap-2 text-center">
+                  <AlertCircle size={20} className="text-faint" />
+                  <p className="text-xs text-faint">
+                    Not recorded for this model version.
+                  </p>
+                  <p className="max-w-xs text-[11px] text-faint">
+                    Phoenix does not fabricate a PR curve. Only
+                    the stored ROC curve, confusion matrix, and
+                    feature importance are shown.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -415,6 +508,17 @@ export function ModelPerformance({ onLogout }: { onLogout: () => void }) {
                 label="Status"
                 value={model_info.status}
                 icon={Target}
+              />
+              <ModelInfoRow
+                label="Previous Version"
+                value={
+                  data.previous_version
+                    ? `${data.previous_version.version} (${data.previous_version.status}, ROC-AUC ${(
+                        data.previous_version.roc_auc * 100
+                      ).toFixed(2)}%)`
+                    : "None — first deployment"
+                }
+                icon={Clock}
               />
               <ModelInfoRow
                 label="Trained At"

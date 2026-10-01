@@ -55,7 +55,7 @@ def save_dataset(
         )
 
         print(
-            "✓ Storage folder ready"
+            "[OK] Storage folder ready"
         )
 
         # ------------------------------------------
@@ -95,7 +95,7 @@ def save_dataset(
             )
 
         print(
-            f"✓ File saved: {file.filename}"
+            f"[OK] File saved: {file.filename}"
         )
 
         # ------------------------------------------
@@ -118,7 +118,7 @@ def save_dataset(
             )
 
         print(
-            f"✓ CSV Loaded "
+            f"[OK] CSV Loaded "
             f"({len(df)} rows, "
             f"{len(df.columns)} columns)"
         )
@@ -158,7 +158,7 @@ def save_dataset(
             )
 
         print(
-            f"✓ Admin Found: {admin.email}"
+            f"[OK] Admin Found: {admin.email}"
         )
 
         # ------------------------------------------
@@ -193,7 +193,7 @@ def save_dataset(
         )
 
         print(
-            "✓ Dataset object created"
+            "[OK] Dataset object created"
         )
 
         db.add(
@@ -207,7 +207,7 @@ def save_dataset(
         )
 
         print(
-            "✓ Dataset saved to database"
+            "[OK] Dataset saved to database"
         )
 
         # ==========================================
@@ -258,7 +258,7 @@ def save_dataset(
         )
 
         print(
-            "✓ Validation report saved"
+            "[OK] Validation report saved"
         )
 
         print(

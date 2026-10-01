@@ -19,6 +19,33 @@ export interface TransactionRecord {
   decision: string | null;
   actual_label: boolean | null;
   created_at: string;
+  /**
+   * Latest analyst verdict, if any. Present only on detail
+   * responses; mirrors Transaction.actual_label.
+   */
+  review?: TransactionReviewSummary | null;
+  review_count?: number;
+}
+
+/**
+ * One analyst ground-truth verdict. actual_label is always a
+ * real boolean from a human reviewer — never copied from
+ * predicted_label and never generated.
+ */
+export interface TransactionReviewSummary {
+  id: string;
+  actual_label: boolean;
+  reviewer: string;
+  source: string;
+  notes: string | null;
+  reviewed_at: string;
+}
+
+export interface ReviewInput {
+  actual_label: boolean;
+  reviewer: string;
+  source?: "analyst_ui" | "api";
+  notes?: string;
 }
 
 export interface TransactionSummary {

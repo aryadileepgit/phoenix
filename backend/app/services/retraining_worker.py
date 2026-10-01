@@ -39,13 +39,14 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import desc
+from sqlalchemy import desc, text
 
 from app.database.database import SessionLocal
 from app.models.drift_event import DriftEvent
 from app.models.ml_model import MLModel
 from app.models.model_report import ModelReport
 from app.models.retraining_history import RetrainingHistory
+from app.models.retraining_job import RetrainingJob
 from app.models.transaction import Transaction
 
 ACTIVE_DATASET_ID = "f99a1cac-51a4-4d18-9b82-a06d975dd97b"
@@ -68,9 +69,14 @@ MAX_REGRESSION = float(os.getenv("RETRAIN_MAX_REGRESSION", "0.02"))
 RECENT_LABEL_CAP = int(os.getenv("RETRAIN_RECENT_CAP", "5000"))
 
 
-_lock = threading.Lock()
+_lock = threading.RLock()
 
 _jobs: dict = {}
+
+# Postgres advisory lock guarding model swaps across processes.
+# The in-memory single-flight check is not enough when the API
+# and consumer run as separate processes.
+_ADVISORY_LOCK_KEY = 727171
 
 
 def _now():
@@ -98,12 +104,60 @@ def _job_snapshot(job):
     }
 
 
-def get_active_job():
+def _row_to_snapshot(row):
+    return {
+        "job_id": row.job_id,
+        "action": row.action_taken
+        if hasattr(row, "action_taken")
+        else row.action,
+        "drift_event_id": (
+            str(row.drift_event_id)
+            if row.drift_event_id
+            else None
+        ),
+        "status": row.status,
+        "progress": row.progress,
+        "error": row.error,
+        "started_at": (
+            row.started_at.isoformat()
+            if row.started_at
+            else None
+        ),
+        "finished_at": (
+            row.finished_at.isoformat()
+            if row.finished_at
+            else None
+        ),
+    }
+
+
+def get_active_job(db=None):
     with _lock:
         for job in _jobs.values():
             if job["status"] in ("queued", "running"):
                 return _job_snapshot(job)
-    return None
+
+    if db is None:
+        return None
+
+    row = (
+        db.query(RetrainingJob)
+        .filter(RetrainingJob.status.in_(["queued", "running"]))
+        .order_by(desc(RetrainingJob.created_at))
+        .first()
+    )
+
+    return _row_to_snapshot(row) if row else None
+
+
+def list_recent_jobs(db, limit=10):
+    rows = (
+        db.query(RetrainingJob)
+        .order_by(desc(RetrainingJob.created_at))
+        .limit(limit)
+        .all()
+    )
+    return [_row_to_snapshot(row) for row in rows]
 
 
 def get_job(job_id):
@@ -112,12 +166,97 @@ def get_job(job_id):
         return _job_snapshot(job) if job else None
 
 
+def list_recent_jobs(db, limit=10):
+    rows = (
+        db.query(RetrainingJob)
+        .order_by(desc(RetrainingJob.created_at))
+        .limit(limit)
+        .all()
+    )
+    return [_row_to_snapshot(row) for row in rows]
+
+
+def _persist_job(job_id):
+    """
+    Best-effort write of the in-memory snapshot to the jobs
+    table so status and failures survive restarts.
+    """
+
+    with _lock:
+        job = _jobs.get(job_id)
+        snapshot = dict(job) if job else None
+
+    if snapshot is None:
+        return
+
+    db = SessionLocal()
+
+    try:
+        row = (
+            db.query(RetrainingJob)
+            .filter(RetrainingJob.job_id == job_id)
+            .first()
+        )
+
+        payload = {
+            "status": snapshot["status"],
+            "progress": snapshot["progress"],
+            "error": snapshot["error"],
+            "started_at": snapshot["started_at"],
+            "finished_at": snapshot["finished_at"],
+        }
+
+        if row is None:
+            row = RetrainingJob(
+                job_id=snapshot["job_id"],
+                action=snapshot["action"],
+                drift_event_id=_as_uuid_or_none(
+                    snapshot["drift_event_id"]
+                ),
+                **payload,
+            )
+            db.add(row)
+        else:
+            for key, value in payload.items():
+                setattr(row, key, value)
+
+        db.commit()
+
+    except Exception:
+        traceback.print_exc()
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
+def _as_uuid_or_none(value):
+    import uuid as uuid_module
+
+    if not value:
+        return None
+
+    try:
+        return uuid_module.UUID(str(value))
+    except (ValueError, AttributeError):
+        return None
+
+
 def _set(job_id, **fields):
     with _lock:
         job = _jobs.get(job_id)
         if job is None:
             return
         job.update(fields)
+
+    if "status" in fields or "progress" in fields:
+        _persist_job(job_id)
 
 
 def _labeled_recent_count(db):
@@ -180,6 +319,24 @@ def maybe_trigger_from_event(drift_event_id, db):
                     "job_id": job["job_id"],
                     "action": job["action"],
                 }
+
+    lingering = (
+        db.query(RetrainingJob)
+        .filter(RetrainingJob.status.in_(["queued", "running"]))
+        .order_by(desc(RetrainingJob.created_at))
+        .first()
+    )
+
+    if lingering is not None:
+        return {
+            "triggered": False,
+            "reason": (
+                "A retraining job is already recorded as "
+                f"{lingering.status} ({lingering.job_id})."
+            ),
+            "job_id": lingering.job_id,
+            "action": lingering.action,
+        }
 
     ok, reason = _cooldown_ok(db)
     if not ok:
@@ -253,6 +410,8 @@ def start_job(action, drift_event_id):
             "finished_at": None,
         }
 
+    _persist_job(job_id)
+
     thread = threading.Thread(
         target=_run_job,
         args=(job_id,),
@@ -278,10 +437,30 @@ def _run_job(job_id):
         started_at=_now(),
         progress="Loading training data.",
     )
+    _persist_job(job_id)
 
     db = SessionLocal()
+    lock_held = False
 
     try:
+        try:
+            lock_held = bool(
+                db.execute(
+                    text(
+                        "SELECT pg_try_advisory_lock(:key)"
+                    ),
+                    {"key": _ADVISORY_LOCK_KEY},
+                ).scalar()
+            )
+        except Exception:
+            lock_held = False
+
+        if not lock_held:
+            raise RuntimeError(
+                "Another retraining worker holds the "
+                "swap lock; refusing to run concurrently."
+            )
+
         result = _train_and_promote(job_id, db)
 
         _set(
@@ -293,6 +472,7 @@ def _run_job(job_id):
             ),
             finished_at=_now(),
         )
+        _persist_job(job_id)
 
     except Exception as exc:
         traceback.print_exc()
@@ -304,8 +484,27 @@ def _run_job(job_id):
             error=str(exc),
             finished_at=_now(),
         )
+        _persist_job(job_id)
+
+        try:
+            shutil.rmtree(
+                STAGING_ROOT / job_id, ignore_errors=True
+            )
+        except Exception:
+            pass
 
     finally:
+        if lock_held:
+            try:
+                db.execute(
+                    text(
+                        "SELECT pg_advisory_unlock(:key)"
+                    ),
+                    {"key": _ADVISORY_LOCK_KEY},
+                )
+            except Exception:
+                pass
+
         try:
             db.close()
         except Exception:
@@ -320,8 +519,10 @@ def _train_and_promote(job_id, db):
     from xgboost import XGBClassifier
     from sklearn.metrics import (
         accuracy_score,
+        average_precision_score,
         confusion_matrix,
         f1_score,
+        precision_recall_curve,
         precision_score,
         recall_score,
         roc_auc_score,
@@ -406,10 +607,32 @@ def _train_and_promote(job_id, db):
             f1_score(y_test, y_pred, zero_division=0)
         ),
         "roc_auc": float(roc_auc_score(y_test, y_probability)),
+        "pr_auc": float(
+            average_precision_score(y_test, y_probability)
+        ),
     }
 
     cm = confusion_matrix(y_test, y_pred)
     fpr, tpr, thresholds = roc_curve(y_test, y_probability)
+    pr_precision, pr_recall, pr_thresholds = precision_recall_curve(
+        y_test, y_probability
+    )
+    import numpy as np
+
+    # Downsample to 200 evenly spaced operating points so the
+    # curve stays small enough for model_metadata.json while
+    # preserving its shape for the frontend chart.
+    _pr_idx = np.linspace(
+        0, len(pr_precision) - 1, num=min(200, len(pr_precision))
+    ).astype(int)
+    pr_curve = {
+        "precision": [float(pr_precision[i]) for i in _pr_idx],
+        "recall": [float(pr_recall[i]) for i in _pr_idx],
+        "thresholds": [
+            float(pr_thresholds[min(i, len(pr_thresholds) - 1)])
+            for i in _pr_idx
+        ],
+    }
     importance = model.feature_importances_
     feature_importance = sorted(
         [
@@ -483,6 +706,7 @@ def _train_and_promote(job_id, db):
         "drift_event_id": drift_event_id,
         "trained_at": _now().isoformat(),
         **metrics,
+        "pr_curve": _json_safe(pr_curve),
     }
 
     with open(staging / "model_metadata.json", "w") as f:
