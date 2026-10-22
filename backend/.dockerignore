@@ -35,7 +35,6 @@ storage/training/
 storage/processed/
 storage/balanced/
 storage/engineered/
-storage/preprocessing_models/
 storage/graphs/
 
 # IDE configs
