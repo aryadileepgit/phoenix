@@ -5,6 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Install system dependencies (psycopg2 needs libpq)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -14,8 +19,12 @@ COPY app ./app
 COPY kafka_consumer.py .
 COPY seed_admin.py .
 
+# Copy startup script
+COPY start.sh .
+RUN chmod +x start.sh
+
 # Copy trained model artifacts and application settings
 COPY storage ./storage
 
-# Start FastAPI
-CMD ["sh", "-c", "exec python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+# Start with our startup script
+CMD ["./start.sh"]

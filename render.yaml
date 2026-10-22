@@ -1,0 +1,83 @@
+services:
+  # Backend API
+  - type: web
+    name: phoenix-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: oregon
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: phoenix-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRE_MINUTES
+        value: "480"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        sync: false
+      - key: KAFKA_TOPIC
+        value: "phoenix-transactions"
+      - key: KAFKA_GROUP_ID
+        value: "phoenix-scoring-group"
+      - key: UPSTASH_KAFKA_REST_URL
+        sync: false
+      - key: UPSTASH_KAFKA_REST_USERNAME
+        sync: false
+      - key: UPSTASH_KAFKA_REST_PASSWORD
+        sync: false
+      - key: EMAIL_ENABLED
+        value: "true"
+      - key: SMTP_HOST
+        value: "smtp.gmail.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USE_TLS
+        value: "true"
+      - key: EMAIL_FROM
+        value: "Phoenix <noreply@yourdomain.com>"
+      - key: EMAIL_BASE_URL
+        value: "https://phoenix-frontend.onrender.com"
+
+  # Frontend (Static Site)
+  - type: web
+    name: phoenix-frontend
+    env: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    pullRequestPreviewsEnabled: true
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://phoenix-backend.onrender.com/api/*
+      - type: rewrite
+        source: /rl-evaluation/*
+        destination: https://phoenix-backend.onrender.com/rl-evaluation/*
+      - type: rewrite
+        source: /health
+        destination: https://phoenix-backend.onrender.com/health
+      - type: rewrite
+        source: /ready
+        destination: https://phoenix-backend.onrender.com/ready
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://phoenix-backend.onrender.com
+
+  # Kafka (using Upstash - external, not in Render)
+  # Note: Render doesn't have native Kafka. Use Upstash (free tier: 10k msg/day)
+  # Add UPSTASH_KAFKA_REST_URL, UPSTASH_KAFKA_REST_USERNAME, UPSTASH_KAFKA_REST_PASSWORD as env vars
+
+  # PostgreSQL Database
+  databases:
+    - name: phoenix-db
+      databaseName: phoenix_db
+      user: phoenix
+      plan: free
+      region: oregon
+      postgresMajorVersion: 16

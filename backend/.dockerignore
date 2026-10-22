@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.coverage
+.tox/
+venv/
+env/
+.env
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+*.pytest_cache/
+htmlcov/
+
+# Data (copied separately)
+storage/raw/
+storage/clean/
+storage/preprocessed/
+storage/features/
+storage/training/
+storage/processed/
+storage/balanced/
+storage/engineered/
+storage/preprocessing_models/
+storage/graphs/
+
+# IDE configs
+.vscode/
+.idea/
