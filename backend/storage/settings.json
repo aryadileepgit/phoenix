@@ -1,0 +1,7 @@
+{
+  "fraud_threshold": 0.7,
+  "verify_threshold": 0.3,
+  "min_confidence": 0.7,
+  "drift_ks_threshold": 0.05,
+  "drift_fraud_rate_threshold": 0.1
+}

@@ -1,14 +1,37 @@
+# ==============================
 # Python
+# ==============================
 venv/
+.venv/
 __pycache__/
 *.pyc
-.env
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
 
-# Node
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+
+# ==============================
+# Node.js / Frontend
+# ==============================
 node_modules/
 dist/
+build/
+.next/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
 
+# ==============================
 # Phoenix uploaded/generated data
+# ==============================
 backend/storage/raw/
 backend/storage/clean/
 backend/storage/preprocessed/
@@ -19,24 +42,43 @@ backend/storage/processed/
 backend/storage/engineered/
 backend/storage/balanced/
 
-# Phoenix generated ML artifacts
-backend/storage/models/
+# ==============================
+# Phoenix ML artifacts
+# Ignore model artifacts by default
+# ==============================
+backend/storage/models/*
+
+# Include the active model directory
+!backend/storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b/
+
+# Ignore everything inside the active model directory by default
+backend/storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b/*
+
+# Include only the model required for deployment
+!backend/storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b/phoenix_xgboost_model.joblib
+
+# Ignore other generated ML artifacts
 backend/storage/graphs/
 backend/storage/preprocessing_models/
 
+# ==============================
 # IDE
+# ==============================
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# OS
+# ==============================
+# Operating system
+# ==============================
 .DS_Store
 Thumbs.db
-# Phoenix generated data and ML artifacts
-backend/storage/
+desktop.ini
 
-
-# Environment secrets
-.env
-backend/.env
-frontend/.env
-
+# ==============================
+# Logs and temporary files
+# ==============================
+*.log
+tmp/
+temp/
