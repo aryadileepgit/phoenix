@@ -102,7 +102,7 @@ class VirtualBatchSimulator:
 
         return X
 
-def _inject_schema_change(self, X: pd.DataFrame, batch_num: int, feature_names: list[str] | None = None) -> tuple[pd.DataFrame, bool]:
+    def _inject_schema_change(self, X: pd.DataFrame, batch_num: int, feature_names: list[str] | None = None) -> tuple[pd.DataFrame, bool]:
         """
         Inject schema variations.
         Returns (modified_X, schema_changed).
