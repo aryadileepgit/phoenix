@@ -1,41 +1,89 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
+import {
+  clearToken,
+  isTokenValid,
+} from "./services/authService";
 import { Welcome } from "./pages/Welcome";
 import { Login } from "./pages/Login";
-import { Dashboard } from "./pages/Dashboard";
-import { Dataset } from "./pages/Dataset";
-import { Transactions } from "./pages/Transactions";
-import { TransactionDetails } from "./pages/TransactionDetails";
-import { Accounts } from "./pages/Accounts";
-import { AccountRisk } from "./pages/AccountRisk";
-import { Investigation } from "./pages/Investigation";
-import { NetworkAnalysis } from "./pages/NetworkAnalysis";
-import { SchemaRegistry } from "./pages/SchemaRegistry";
-import { DriftMonitoring } from "./pages/DriftMonitoring";
-import { AdaptiveLearning } from "./pages/AdaptiveLearning";
-import { ModelPerformance } from "./pages/ModelPerformance";
-import { Activity } from "./pages/Activity";
-import { Settings } from "./pages/Settings";
+import { ForgotPassword } from "./pages/ForgotPassword";
+import { ResetPassword } from "./pages/ResetPassword";
+import { RLEvaluation } from "./pages/RLEvaluation";
 
-const AUTH_STORAGE_KEY = "phoenix_auth";
+const Dashboard = lazy(() =>
+  import("./pages/Dashboard").then((m) => ({ default: m.Dashboard }))
+);
+const Dataset = lazy(() =>
+  import("./pages/Dataset").then((m) => ({ default: m.Dataset }))
+);
+const Transactions = lazy(() =>
+  import("./pages/Transactions").then((m) => ({
+    default: m.Transactions,
+  }))
+);
+const TransactionDetails = lazy(() =>
+  import("./pages/TransactionDetails").then((m) => ({
+    default: m.TransactionDetails,
+  }))
+);
+const Accounts = lazy(() =>
+  import("./pages/Accounts").then((m) => ({ default: m.Accounts }))
+);
+const AccountRisk = lazy(() =>
+  import("./pages/AccountRisk").then((m) => ({
+    default: m.AccountRisk,
+  }))
+);
+const Investigation = lazy(() =>
+  import("./pages/Investigation").then((m) => ({
+    default: m.Investigation,
+  }))
+);
+const NetworkAnalysis = lazy(() =>
+  import("./pages/NetworkAnalysis").then((m) => ({
+    default: m.NetworkAnalysis,
+  }))
+);
+const SchemaRegistry = lazy(() =>
+  import("./pages/SchemaRegistry").then((m) => ({
+    default: m.SchemaRegistry,
+  }))
+);
+const DriftMonitoring = lazy(() =>
+  import("./pages/DriftMonitoring").then((m) => ({
+    default: m.DriftMonitoring,
+  }))
+);
+const AdaptiveLearning = lazy(() =>
+  import("./pages/AdaptiveLearning").then((m) => ({
+    default: m.AdaptiveLearning,
+  }))
+);
+const ModelPerformance = lazy(() =>
+  import("./pages/ModelPerformance").then((m) => ({
+    default: m.ModelPerformance,
+  }))
+);
+const Activity = lazy(() =>
+  import("./pages/Activity").then((m) => ({ default: m.Activity }))
+);
+const Settings = lazy(() =>
+  import("./pages/Settings").then((m) => ({ default: m.Settings }))
+);
 
+/*
+ * Route guard reads the signed bearer token, not a boolean
+ * flag: flipping localStorage no longer grants access, and
+ * expired tokens fail closed. The backend re-verifies the
+ * signature on every request.
+ */
 function readStoredAuth(): boolean {
-  try {
-    return localStorage.getItem(AUTH_STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
+  return isTokenValid();
 }
 
 function writeStoredAuth(authed: boolean) {
-  try {
-    if (authed) {
-      localStorage.setItem(AUTH_STORAGE_KEY, "true");
-    } else {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-    }
-  } catch {
-    // localStorage unavailable
+  if (!authed) {
+    clearToken();
   }
 }
 
@@ -65,9 +113,19 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center bg-bg text-sm text-muted">
+            Loading…
+          </div>
+        }
+      >
       <Routes>
         <Route path="/" element={<Welcome />} />
         <Route path="/login" element={<Login onLogin={handleLogin} />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/rl-evaluation" element={<RLEvaluation onLogout={handleLogout} />} />
         <Route
           path="/dashboard"
           element={
@@ -182,6 +240,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 }

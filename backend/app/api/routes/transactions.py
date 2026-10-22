@@ -101,7 +101,23 @@ async def create_transaction(
         db.commit()
         db.refresh(new_transaction)
 
-        return new_transaction
+        return TransactionResponse(
+            transaction_id=new_transaction.transaction_id,
+            account_id=new_transaction.account_id,
+            amount=new_transaction.amount,
+            transaction_time=new_transaction.transaction_time,
+            fraud_probability=scoring_result[
+                "fraud_probability"
+            ],
+            predicted_label=scoring_result[
+                "predicted_label"
+            ],
+            risk_level=scoring_result["risk_level"],
+            decision=scoring_result["decision"],
+            scoring_latency_ms=scoring_result.get(
+                "scoring_latency_ms"
+            ),
+        )
 
     except HTTPException:
         db.rollback()
@@ -577,14 +593,13 @@ def investigate_account(
     }
 
 
-# Boolean presence flags (card_present, device_known) are
-# near-universal per-row states, not identity evidence: staged
-# data shows card_present=True on 1424/1449 rows, which linked
-# every account to every other account. They are excluded so
-# only genuinely discriminating shared values form edges.
-NON_RELATIONSHIP_FIELDS = frozenset(
-    {"card_present", "device_known"}
-)
+# Allowlist of identity-bearing fields. Only shared values of
+# these form graph edges. Boolean presence flags (card_present,
+# device_known) are excluded by construction: staged data showed
+# card_present=True on 1424/1449 rows, which linked every account
+# to every other account. A denylist would rot with each new
+# simulator field; an allowlist fails closed.
+RELATIONSHIP_FIELDS = frozenset({"card_id", "device_id"})
 
 
 def extract_relationship_attributes(transaction):
@@ -592,14 +607,14 @@ def extract_relationship_attributes(transaction):
 
     if isinstance(transaction.card_information, dict):
         for key, value in transaction.card_information.items():
-            if key in NON_RELATIONSHIP_FIELDS:
+            if key not in RELATIONSHIP_FIELDS:
                 continue
             if value is not None and str(value).strip():
                 attributes[f"card:{key}"] = str(value).strip()
 
     if isinstance(transaction.device_information, dict):
         for key, value in transaction.device_information.items():
-            if key in NON_RELATIONSHIP_FIELDS:
+            if key not in RELATIONSHIP_FIELDS:
                 continue
             if value is not None and str(value).strip():
                 attributes[f"device:{key}"] = str(value).strip()

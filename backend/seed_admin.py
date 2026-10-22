@@ -6,9 +6,17 @@ from app.models.user import User
 from app.utils.security import hash_password
 
 
-ADMIN_NAME = "Administrator"
-ADMIN_EMAIL = "ayoradileep@gmail.com"
-ADMIN_PASSWORD = "admin123"
+import os
+
+ADMIN_NAME = os.getenv(
+    "PHOENIX_ADMIN_NAME", "Administrator"
+)
+ADMIN_EMAIL = os.getenv(
+    "PHOENIX_ADMIN_EMAIL", "ayoradileep@gmail.com"
+)
+ADMIN_PASSWORD = os.getenv(
+    "PHOENIX_ADMIN_PASSWORD", "admin123"
+)
 
 
 def seed_admin():

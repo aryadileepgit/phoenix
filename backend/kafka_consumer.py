@@ -14,7 +14,11 @@ It never retrains the model and never fabricates predictions.
 At-least-once semantics: offsets commit only after a message is
 persisted or deterministically skipped (duplicate transaction_id,
 unmapped fields, validation failure). Unexpected errors roll back
-without committing so the record is redelivered.
+without committing so the record is redelivered — up to
+CONSUMER_MAX_RETRIES times per offset, after which the payload
+plus the error is published to the DLQ topic and the offset IS
+committed. Without the DLQ, one poison message would redeliver
+forever and halt the whole partition.
 
 Run from backend/:
     venv\\Scripts\\python.exe kafka_consumer.py
@@ -23,6 +27,8 @@ Environment:
     KAFKA_BOOTSTRAP_SERVERS (default localhost:9092)
     KAFKA_TOPIC             (default phoenix-transactions)
     KAFKA_GROUP_ID          (default phoenix-scoring-group)
+    KAFKA_DLQ_TOPIC         (default <KAFKA_TOPIC>.dlq)
+    CONSUMER_MAX_RETRIES    (default 5)
 """
 
 import json
@@ -30,7 +36,7 @@ import logging
 import os
 import sys
 
-from kafka import KafkaConsumer
+from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaError
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
@@ -60,6 +66,35 @@ BOOTSTRAP_SERVERS = os.getenv(
 TOPIC = os.getenv("KAFKA_TOPIC", "phoenix-transactions")
 
 GROUP_ID = os.getenv("KAFKA_GROUP_ID", "phoenix-scoring-group")
+
+DLQ_TOPIC = os.getenv("KAFKA_DLQ_TOPIC", f"{TOPIC}.dlq")
+
+MAX_RETRIES = int(os.getenv("CONSUMER_MAX_RETRIES", "5"))
+
+_dlq_producer = None
+
+
+def _dlq():
+    """
+    Lazily created DLQ producer. Publishing is best-effort:
+    if the DLQ itself is unreachable the offset stays
+    uncommitted and nothing is lost.
+    """
+
+    global _dlq_producer
+
+    if _dlq_producer is None:
+        _dlq_producer = KafkaProducer(
+            bootstrap_servers=BOOTSTRAP_SERVERS,
+            key_serializer=lambda k: k.encode("utf-8")
+            if k
+            else None,
+            value_serializer=lambda v: json.dumps(v).encode(
+                "utf-8"
+            ),
+        )
+
+    return _dlq_producer
 
 
 def score_and_persist(db, incoming):
@@ -154,6 +189,47 @@ def handle_message(db, incoming):
         )
 
 
+def _quarantine(consumer, message, incoming, exc):
+    """
+    Move a poison message to the DLQ and commit past it.
+    If the DLQ publish itself fails, the offset stays
+    uncommitted (retry later) — quarantine never loses data.
+    """
+
+    envelope = {
+        "topic": message.topic,
+        "partition": message.partition,
+        "offset": message.offset,
+        "error": str(exc)[:500],
+        "payload": incoming,
+    }
+
+    try:
+        _dlq().send(
+            DLQ_TOPIC,
+            key=incoming.get("txn_id")
+            or incoming.get("transaction_id"),
+            value=envelope,
+        ).get(timeout=30)
+    except Exception as dlq_exc:
+        logger.error(
+            "DLQ publish failed for offset %s (%s); "
+            "NOT committed, will retry",
+            message.offset,
+            dlq_exc,
+        )
+        raise
+
+    logger.error(
+        "offset %s failed %s times; quarantined to '%s': %s",
+        message.offset,
+        MAX_RETRIES,
+        DLQ_TOPIC,
+        exc,
+    )
+    consumer.commit()
+
+
 def main():
     logger.info(
         "connecting to Kafka at %s, topic '%s', group '%s'",
@@ -179,9 +255,20 @@ def main():
 
     logger.info("consumer running; Ctrl+C to stop.")
 
+    # Consecutive unexpected failures per offset. Reset on
+    # any success so a flaky downstream doesn't accumulate
+    # toward the DLQ threshold across unrelated messages.
+    failures = {}
+
     try:
         for message in consumer:
             incoming = message.value
+
+            offset_key = (
+                message.topic,
+                message.partition,
+                message.offset,
+            )
 
             if not isinstance(incoming, dict):
                 logger.warning(
@@ -196,16 +283,31 @@ def main():
             try:
                 handle_message(db, incoming)
             except Exception as exc:
-                logger.error(
-                    "scoring failed at offset %s (%s); "
-                    "offset NOT committed, will retry",
-                    message.offset,
-                    exc,
+                failures[offset_key] = (
+                    failures.get(offset_key, 0) + 1
                 )
-                continue
+                attempt = failures[offset_key]
+
+                if attempt >= MAX_RETRIES:
+                    _quarantine(
+                        consumer, message, incoming, exc
+                    )
+                    failures.pop(offset_key, None)
+                else:
+                    logger.error(
+                        "scoring failed at offset %s "
+                        "(attempt %s/%s, %s); NOT committed, "
+                        "will retry",
+                        message.offset,
+                        attempt,
+                        MAX_RETRIES,
+                        exc,
+                    )
+                    continue
             finally:
                 db.close()
 
+            failures.pop(offset_key, None)
             consumer.commit()
 
     except KeyboardInterrupt:

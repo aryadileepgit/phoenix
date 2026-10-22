@@ -21,7 +21,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from app.api.routes.transactions import (
-    NON_RELATIONSHIP_FIELDS,
+    RELATIONSHIP_FIELDS,
     extract_relationship_attributes,
 )
 
@@ -33,6 +33,11 @@ def _headers(name):
         return next(csv.reader(f))
 
 
+@unittest.skipUnless(
+    (RAW_DIR / "train_transaction.csv").exists()
+    and (RAW_DIR / "train_identity.csv").exists(),
+    "IEEE-CIS raw CSVs are gitignored; run locally with data present.",
+)
 class NetworkAttributeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -81,18 +86,44 @@ class NetworkAttributeTests(unittest.TestCase):
         self.assertIn("card:card_id", attrs)
         self.assertIn("device:device_id", attrs)
 
+    def test_card_device_allowlist(self):
+        self.assertEqual(
+            RELATIONSHIP_FIELDS, {"card_id", "device_id"}
+        )
+        txn = SimpleNamespace(
+            card_information={
+                "card_id": "CARD_9",
+                "card1": 13566,
+                "card_present": True,
+            },
+            device_information={
+                "device_id": "DEV_9",
+                "DeviceType": "mobile",
+                "device_known": True,
+            },
+            additional_data={},
+        )
+        attrs = extract_relationship_attributes(txn)
+        self.assertEqual(
+            attrs,
+            {
+                "card:card_id": "CARD_9",
+                "device:device_id": "DEV_9",
+            },
+        )
+
     def test_values_verbatim_no_invention(self):
         txn = SimpleNamespace(
-            card_information={"card1": 13566},
-            device_information={"DeviceType": "mobile"},
+            card_information={"card_id": "CARD_13566"},
+            device_information={"device_id": "DEV_X1"},
             additional_data={
                 "P_emaildomain": "gmail.com",
                 "addr1": 315,
             },
         )
         attrs = extract_relationship_attributes(txn)
-        self.assertEqual(attrs["card:card1"], "13566")
-        self.assertEqual(attrs["device:DeviceType"], "mobile")
+        self.assertEqual(attrs["card:card_id"], "CARD_13566")
+        self.assertEqual(attrs["device:device_id"], "DEV_X1")
         self.assertEqual(
             attrs["data:P_emaildomain"], "gmail.com"
         )

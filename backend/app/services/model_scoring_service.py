@@ -37,6 +37,31 @@ class FraudScoringService:
         with open(MEDIANS_PATH, "r") as f:
             self.medians = json.load(f)
 
+        # Cache transformer metadata once: profiling showed
+        # get_feature_names_out() + the transformers_ walk cost
+        # ~150ms per single-row score. The saved transformer is
+        # immutable after load, so caching changes nothing
+        # numerically. The remaining ~100ms is the
+        # OneHotEncoder.transform itself (batch-oriented sklearn
+        # on one row); micro-batching the consumer is the next
+        # lever if sub-100ms is ever required.
+        columns = []
+
+        for transformer_name, transformer, cols in (
+            self.preprocessor.transformers_
+        ):
+            if transformer_name == "remainder":
+                continue
+
+            columns.extend(cols)
+
+        self._preprocessor_columns = columns
+        self._processed_columns = (
+            self.preprocessor
+            .get_feature_names_out()
+            .tolist()
+        )
+
         try:
             self._model_mtime = MODEL_PATH.stat().st_mtime_ns
         except OSError:
@@ -67,6 +92,10 @@ class FraudScoringService:
 
     def score(self, transaction_data: dict):
 
+        import time
+
+        started = time.perf_counter()
+
         with self._lock:
             self.reload_if_updated()
 
@@ -87,6 +116,9 @@ class FraudScoringService:
             "predicted_label": predicted_label,
             "risk_level": risk_level,
             "decision": decision,
+            "scoring_latency_ms": round(
+                (time.perf_counter() - started) * 1000, 2
+            ),
         }
 
     def _build_features(self, transaction_data: dict):
@@ -371,22 +403,12 @@ class FraudScoringService:
 
         # ---------------------------------------------------------
         # Get the exact raw columns expected by the saved
-        # IEEE-CIS ColumnTransformer
+        # IEEE-CIS ColumnTransformer (column lists cached at
+        # load; see _load_artifacts)
         # ---------------------------------------------------------
 
-        preprocessor_columns = []
-
-        for transformer_name, transformer, columns in (
-            self.preprocessor.transformers_
-        ):
-
-            if transformer_name == "remainder":
-                continue
-
-            preprocessor_columns.extend(columns)
-
         preprocessor_input = df.reindex(
-            columns=preprocessor_columns
+            columns=self._preprocessor_columns
         )
 
         # ---------------------------------------------------------
@@ -397,15 +419,9 @@ class FraudScoringService:
             preprocessor_input
         )
 
-        processed_columns = (
-            self.preprocessor
-            .get_feature_names_out()
-            .tolist()
-        )
-
         processed_df = pd.DataFrame(
             processed_array,
-            columns=processed_columns
+            columns=self._processed_columns
         )
 
         # ---------------------------------------------------------

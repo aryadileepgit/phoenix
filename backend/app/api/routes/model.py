@@ -61,6 +61,25 @@ def get_performance(db: Session = Depends(get_db)):
         .first()
     )
 
+    roc_curve = report.roc_curve
+
+    if isinstance(roc_curve, dict):
+        fpr = roc_curve.get("fpr") or []
+
+        if len(fpr) > 300:
+            step = len(fpr) / 300
+            idx = [int(i * step) for i in range(300)]
+
+            roc_curve = {
+                key: [
+                    values[i]
+                    for i in idx
+                    if i < len(values)
+                ]
+                for key, values in roc_curve.items()
+                if isinstance(values, list)
+            }
+
     return {
         "model_info": {
             "model_name": report.model_name,
@@ -92,7 +111,7 @@ def get_performance(db: Session = Depends(get_db)):
             if previous
             else None
         ),
-        "roc_curve": report.roc_curve,
+        "roc_curve": roc_curve,
         "pr_curve": metadata.get("pr_curve"),
         "confusion_matrix": report.confusion_matrix,
         "feature_importance": report.feature_importance,

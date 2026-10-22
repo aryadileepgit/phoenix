@@ -35,6 +35,53 @@ export const apiClient = axios.create({
   baseURL: API_BASE_URL,
 });
 
+/*
+ * Attach the JWT bearer token (stored at login) to every
+ * request. A flipped localStorage flag alone no longer
+ * reaches the API: the backend verifies the signature.
+ */
+apiClient.interceptors.request.use((config) => {
+  try {
+    const token = localStorage.getItem("phoenix_token");
+
+    if (token) {
+      config.headers.set(
+        "Authorization",
+        `Bearer ${token}`
+      );
+    }
+  } catch {
+    // localStorage unavailable
+  }
+
+  return config;
+});
+
+/*
+ * Expired/revoked tokens surface as 401. Drop the token and
+ * bounce to /login instead of rendering broken pages.
+ */
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (
+      error?.response?.status === 401 &&
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/login"
+    ) {
+      try {
+        localStorage.removeItem("phoenix_token");
+      } catch {
+        // localStorage unavailable
+      }
+
+      window.location.href = "/login";
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 /**
  * ==========================================================
  * API ERROR TYPES

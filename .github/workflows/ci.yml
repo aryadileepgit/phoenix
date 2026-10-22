@@ -1,0 +1,74 @@
+# Phoenix CI: backend tests + frontend build on every push/PR.
+#
+# Artifact-dependent checks (model scoring, network vocabulary,
+# Kafka round-trip) need the gitignored IEEE data and models, so
+# they run locally (see README). CI gates what it can without
+# them: token contract, import health, and the production build.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: phoenix
+          POSTGRES_PASSWORD: phoenix
+          POSTGRES_DB: phoenix_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U phoenix -d phoenix_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg2://phoenix:phoenix@localhost:5432/phoenix_db
+      JWT_SECRET: phoenix-ci-test-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend deps
+        run: pip install -r backend/requirements.txt
+
+      - name: Byte-compile all backend sources
+        run: python -m compileall -q backend/app backend/kafka_consumer.py
+
+      - name: DB-free contract tests
+        run: python -m unittest test_auth_tokens -v
+        working-directory: backend
+
+      - name: Vocabulary tests (skip without IEEE data)
+        run: python -m unittest test_network_attributes -v
+        working-directory: backend
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install frontend deps
+        run: npm ci --no-audit --no-fund
+        working-directory: frontend
+
+      - name: Production build
+        run: npm run build
+        working-directory: frontend

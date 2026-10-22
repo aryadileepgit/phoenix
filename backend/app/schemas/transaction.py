@@ -23,3 +23,4 @@ class TransactionResponse(BaseModel):
     predicted_label: bool | None
     risk_level: str | None
     decision: str | None
+    scoring_latency_ms: float | None = None

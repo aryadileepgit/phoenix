@@ -619,6 +619,32 @@ def _train_and_promote(job_id, db):
     )
     import numpy as np
 
+    # F1-optimal operating point + precision/recall at the live
+    # BLOCK cutoff, stored as metadata (informational: the
+    # evaluation cutoff stays 0.5, decisions use runtime
+    # settings). Training data is SMOTE-balanced, so no
+    # scale_pos_weight is applied (ratio would be ~1.0).
+    _f1 = (
+        2
+        * pr_precision
+        * pr_recall
+        / np.maximum(pr_precision + pr_recall, 1e-12)
+    )
+    _best = int(np.argmax(_f1))
+    _block = float(
+        os.getenv("PHOENIX_BLOCK_THRESHOLD", "0.70")
+    )
+    _block_pred = y_probability >= _block
+    _block_tp = int(
+        ((_block_pred == 1) & (y_test.to_numpy() == 1)).sum()
+    )
+    _block_fp = int(
+        ((_block_pred == 1) & (y_test.to_numpy() == 0)).sum()
+    )
+    _block_fn = int(
+        ((_block_pred == 0) & (y_test.to_numpy() == 1)).sum()
+    )
+
     # Downsample to 200 evenly spaced operating points so the
     # curve stays small enough for model_metadata.json while
     # preserving its shape for the frontend chart.
@@ -707,6 +733,17 @@ def _train_and_promote(job_id, db):
         "trained_at": _now().isoformat(),
         **metrics,
         "pr_curve": _json_safe(pr_curve),
+        "f1_optimal_threshold": float(
+            pr_thresholds[
+                min(_best, len(pr_thresholds) - 1)
+            ]
+        ),
+        "block_precision": float(
+            _block_tp / max(_block_tp + _block_fp, 1)
+        ),
+        "block_recall": float(
+            _block_tp / max(_block_tp + _block_fn, 1)
+        ),
     }
 
     with open(staging / "model_metadata.json", "w") as f:

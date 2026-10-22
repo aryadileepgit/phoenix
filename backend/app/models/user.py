@@ -48,3 +48,13 @@ class User(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+    reset_token: Mapped[str | None] = mapped_column(
+        String(512),
+        nullable=True,
+    )
+
+    reset_token_expires: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )

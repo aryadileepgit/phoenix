@@ -353,15 +353,69 @@ def predict_transaction(
 # analyzed transaction + its prediction so the Transactions page has
 # real data to show.
 
+BATCH_ROW_LIMIT = 5000
+
+
+def _parse_json_cell(value):
+    """CSV dict columns arrive as JSON strings; pass dicts through."""
+
+    import json
+
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+
+    if isinstance(value, dict):
+        return value
+
+    if isinstance(value, str):
+        text = value.strip()
+
+        if not text:
+            return None
+
+        try:
+            parsed = json.loads(text)
+        except ValueError:
+            return None
+
+        return parsed if isinstance(parsed, dict) else None
+
+    return None
+
+
 def predict_transactions_batch(
     dataset_id,
     df: pd.DataFrame,
     db: Session
 ):
+    """
+    Score a CSV of transactions through the live IEEE-CIS pipeline.
 
-    dataset, model, encoders, scaler, dataset_preprocessing_path = (
-        _load_model_artifacts(dataset_id, db)
+    Each row goes through the exact same path as POST
+    /transactions/score (schema-evolution normalize, TransactionCreate
+    validation, FraudScoringService, persist). One bad row fails only
+    itself via SAVEPOINT, never the whole batch.
+    """
+
+    from pydantic import ValidationError
+
+    from app.schemas.transaction import TransactionCreate
+    from app.services.model_scoring_service import (
+        fraud_scoring_service,
     )
+    from app.services.schema_evolution_service import (
+        schema_evolution_service,
+    )
+
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id
+    ).first()
+
+    if dataset is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not found."
+        )
 
     if df.empty:
         raise HTTPException(
@@ -369,105 +423,148 @@ def predict_transactions_batch(
             detail="The uploaded CSV file contains no rows."
         )
 
-    # Keep the raw, un-encoded values for persistence — the
-    # DataFrame passed into _prepare_input_features gets mutated
-    # (categorical columns get label-encoded in place).
-    raw_records = df.to_dict(orient="records")
-
-    prepared = _prepare_input_features(
-        df.copy(),
-        model,
-        encoders,
-        scaler,
-        dataset_preprocessing_path
-    )
-
-    try:
-        predictions = model.predict(prepared)
-        probabilities = model.predict_proba(prepared)[:, 1]
-
-    except Exception as e:
+    if len(df) > BATCH_ROW_LIMIT:
         raise HTTPException(
-            status_code=500,
+            status_code=400,
             detail=(
-                f"Batch prediction failed: {str(e)}"
-            )
+                f"Batch limited to {BATCH_ROW_LIMIT} rows, "
+                f"got {len(df)}."
+            ),
         )
 
     results = []
-    saved_transactions = []
+    scored = 0
+    failed = 0
 
-    for i, record in enumerate(raw_records):
+    for index, record in enumerate(
+        df.to_dict(orient="records")
+    ):
+        row = {
+            key: (None if pd.isna(value) else value)
+            for key, value in record.items()
+        }
 
-        predicted_label = bool(int(predictions[i]))
-        fraud_probability = round(float(probabilities[i]), 4)
-        legitimate_probability = round(float(1 - probabilities[i]), 4)
+        for field in (
+            "card_information",
+            "device_information",
+            "additional_data",
+        ):
+            if field in row:
+                row[field] = _parse_json_cell(row[field])
 
-        actual_label_value = None
-        if "isFraud" in record and pd.notna(record.get("isFraud")):
-            actual_label_value = bool(record["isFraud"])
+        try:
+            evolution_result = (
+                schema_evolution_service.normalize_transaction(
+                    row
+                )
+            )
 
-        sender_name = None
-        if "nameOrig" in record and pd.notna(record.get("nameOrig")):
-            sender_name = str(record["nameOrig"])
+            if evolution_result["unmapped_fields"]:
+                raise ValueError(
+                    "Unmapped fields: "
+                    + ", ".join(
+                        sorted(
+                            evolution_result["unmapped_fields"]
+                        )
+                    )
+                )
 
-        receiver_name = None
-        if "nameDest" in record and pd.notna(record.get("nameDest")):
-            receiver_name = str(record["nameDest"])
+            transaction = TransactionCreate.model_validate(
+                evolution_result["canonical_transaction"]
+            )
 
-        transaction = Transaction(
-            dataset_id=dataset.id,
-            step=int(record["step"]),
-            transaction_type=str(record["type"]),
-            amount=float(record["amount"]),
-            sender=sender_name,
-            sender_balance_before=float(record["oldbalanceOrg"]),
-            sender_balance_after=float(record["newbalanceOrig"]),
-            receiver=receiver_name,
-            receiver_balance_before=float(record["oldbalanceDest"]),
-            receiver_balance_after=float(record["newbalanceDest"]),
-            actual_label=actual_label_value,
-            predicted_label=predicted_label,
-            fraud_probability=fraud_probability,
+            transaction_data = transaction.model_dump()
+
+            scoring_result = fraud_scoring_service.score(
+                transaction_data
+            )
+
+            savepoint = db.begin_nested()
+
+            try:
+                new_transaction = Transaction(
+                    transaction_id=transaction.transaction_id,
+                    account_id=transaction.account_id,
+                    amount=transaction.amount,
+                    transaction_time=transaction.transaction_time,
+                    product_code=transaction.product_code,
+                    card_information=transaction.card_information,
+                    device_information=transaction.device_information,
+                    additional_data=transaction.additional_data,
+                    fraud_probability=scoring_result[
+                        "fraud_probability"
+                    ],
+                    predicted_label=scoring_result[
+                        "predicted_label"
+                    ],
+                    risk_level=scoring_result["risk_level"],
+                    decision=scoring_result["decision"],
+                )
+
+                db.add(new_transaction)
+                db.flush()
+            except Exception:
+                savepoint.rollback()
+                raise
+
+            scored += 1
+
+            results.append(
+                {
+                    "row": index,
+                    "transaction_id": transaction.transaction_id,
+                    "status": "scored",
+                    "fraud_probability": scoring_result[
+                        "fraud_probability"
+                    ],
+                    "risk_level": scoring_result["risk_level"],
+                    "decision": scoring_result["decision"],
+                    "scoring_latency_ms": scoring_result.get(
+                        "scoring_latency_ms"
+                    ),
+                }
+            )
+
+        except (ValidationError, ValueError) as e:
+            failed += 1
+
+            results.append(
+                {
+                    "row": index,
+                    "status": "failed",
+                    "error": str(e)[:300],
+                }
+            )
+
+        except Exception as e:
+            failed += 1
+
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+            results.append(
+                {
+                    "row": index,
+                    "status": "failed",
+                    "error": str(e)[:300],
+                }
+            )
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Batch persist failed: {str(e)}",
         )
 
-        db.add(transaction)
-        saved_transactions.append(transaction)
-
-        results.append({
-            "transaction_id": None,  # filled in after commit
-            "type": str(record["type"]),
-            "amount": float(record["amount"]),
-            "predicted_label": int(predictions[i]),
-            "result": "Fraud" if predicted_label else "Legitimate",
-            "fraud_probability": fraud_probability,
-            "legitimate_probability": legitimate_probability,
-        })
-
-    db.commit()
-
-    for i, transaction in enumerate(saved_transactions):
-        db.refresh(transaction)
-        results[i]["transaction_id"] = str(transaction.id)
-        results[i]["created_at"] = transaction.created_at
-
-    total_transactions = len(results)
-    fraud_count = int(sum(predictions))
-    legitimate_count = total_transactions - fraud_count
-    fraud_rate = (
-        round((fraud_count / total_transactions) * 100, 2)
-        if total_transactions else 0.0
-    )
-
     return {
-        "dataset_id": str(dataset.id),
-        "dataset_name": dataset.dataset_name,
-        "model": "XGBoost",
-        "summary": {
-            "total_transactions": total_transactions,
-            "fraud_count": fraud_count,
-            "legitimate_count": legitimate_count,
-            "fraud_rate": fraud_rate,
-        },
+        "total_rows": len(df),
+        "scored": scored,
+        "failed": failed,
         "results": results,
     }

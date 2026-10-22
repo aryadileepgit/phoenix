@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.services.auth_service import get_current_user
 
 from app.database.base import Base
 from app.database.database import engine
@@ -9,6 +11,7 @@ import app.models
 
 from app.api.auth import router as auth_router
 from app.api.dataset import router as dataset_router
+from app.api.routes.health import router as health_router
 from app.api.routes.transactions import router as transactions_router
 
 Base.metadata.create_all(bind=engine)
@@ -23,7 +26,7 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -34,8 +37,14 @@ app.add_middleware(
 # wrong column names (upload_time/filename/rows) and is shadowed by
 # app.api.dataset's working handler. It is intentionally not mounted.
 app.include_router(auth_router)
-app.include_router(dataset_router)
-app.include_router(transactions_router)
+app.include_router(health_router)
+
+# Everything below requires a valid bearer token from
+# POST /auth/login. /auth/* and /health stay public.
+_guard = [Depends(get_current_user)]
+
+app.include_router(dataset_router, dependencies=_guard)
+app.include_router(transactions_router, dependencies=_guard)
 
 from app.api.routes.activity import router as activity_router
 from app.api.routes.schema import router as schema_router
@@ -44,11 +53,13 @@ from app.api.routes.adaptive import router as adaptive_router
 from app.api.routes.model import router as model_router
 from app.api.routes.settings import router as settings_router
 from app.api.routes.dashboard import router as dashboard_router
+from app.api.routes.rl_evaluation import router as rl_evaluation_router
 
-app.include_router(activity_router)
-app.include_router(schema_router)
-app.include_router(drift_router)
-app.include_router(adaptive_router)
-app.include_router(model_router)
-app.include_router(settings_router)
-app.include_router(dashboard_router)
+app.include_router(activity_router, dependencies=_guard)
+app.include_router(schema_router, dependencies=_guard)
+app.include_router(drift_router, dependencies=_guard)
+app.include_router(adaptive_router, dependencies=_guard)
+app.include_router(model_router, dependencies=_guard)
+app.include_router(settings_router, dependencies=_guard)
+app.include_router(dashboard_router, dependencies=_guard)
+app.include_router(rl_evaluation_router, dependencies=_guard)

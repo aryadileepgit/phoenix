@@ -10,6 +10,16 @@ Defaults preserve the original behavior:
   verify_threshold = 0.30, fraud_threshold = 0.70
   min_confidence   = 0.70
   drift ks threshold = 0.05, fraud-rate threshold = 0.10
+
+Threshold empirical basis (v1.2, untouched IEEE test set,
+118108 rows, 3.5% fraud):
+  cutoff 0.30 -> precision 0.760, recall 0.545 (best F1 0.635)
+  cutoff 0.50 -> precision 0.883, recall 0.450
+  cutoff 0.70 -> precision 0.936, recall 0.367
+So 0.30 routes a 2.5%-of-traffic review queue at 0.76
+precision, and 0.70 blocks at 0.94 precision. Precision >= 0.90
+holds down to cutoff 0.54. The defaults are evidence-backed;
+change them through PUT /settings, not by editing code.
 """
 
 import json

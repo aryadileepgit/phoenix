@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
-import { login } from "../services/authService";
+import { useNavigate, Link } from "react-router-dom";
+import { login, saveToken } from "../services/authService";
 import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, CheckCircle2, XCircle, CreditCard } from "lucide-react";
 import { PhoenixLogo } from "../components/PhoenixLogo";
@@ -31,10 +31,12 @@ export function Login({ onLogin }: LoginProps) {
         password,
       });
 
-      if (response.success) {
+      if (response.success && response.access_token) {
         /*
-         * App.tsx handles persistence of the authentication state.
+         * Persist the signed bearer token; App.tsx validates
+         * it, and the API client attaches it to requests.
          */
+        saveToken(response.access_token);
         onLogin();
 
         navigate("/dashboard", { replace: true });
@@ -318,7 +320,7 @@ export function Login({ onLogin }: LoginProps) {
               </div>
 
               {/* Remember me */}
-              <div className="flex items-center text-sm">
+              <div className="flex items-center justify-between text-sm">
                 <label className="flex cursor-pointer items-center gap-2 text-slate-300">
                   <input
                     type="checkbox"
@@ -331,6 +333,13 @@ export function Login({ onLogin }: LoginProps) {
 
                   Remember me
                 </label>
+
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-primary hover:text-primary-dark hover:underline transition-colors"
+                >
+                  Forgot password?
+                </Link>
               </div>
 
               {/* Error */}
