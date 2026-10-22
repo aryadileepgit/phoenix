@@ -82,3 +82,8 @@ desktop.ini
 *.log
 tmp/
 temp/
+
+# Include IEEE-CIS preprocessing artifacts required by the scoring service
+!backend/storage/preprocessing_models/
+!backend/storage/preprocessing_models/ieee_cis_preprocessor.joblib
+!backend/storage/preprocessing_models/ieee_cis_feature_metadata.joblib
