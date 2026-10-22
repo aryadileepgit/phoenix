@@ -54,4 +54,5 @@ python seed_admin.py
 
 # Start the application
 echo "Starting FastAPI server..."
-exec python -m uvicorn app.main:app --host 0.0.0.0 --port \${PORT:-10000}
+PORT="${PORT:-10000}"
+exec python -m uvicorn app.main:app --host 0.0.0.0 --port "$PORT"
