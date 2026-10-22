@@ -69,9 +69,20 @@ services:
       - key: VITE_API_BASE_URL
         value: https://phoenix-backend.onrender.com
 
-  # Kafka (using Upstash - external, not in Render)
-  # Note: Render doesn't have native Kafka. Use Upstash (free tier: 10k msg/day)
-  # Add UPSTASH_KAFKA_REST_URL, UPSTASH_KAFKA_REST_USERNAME, UPSTASH_KAFKA_REST_PASSWORD as env vars
+  # Kafka (Self-hosted on Render - Free)
+  - type: worker
+    name: phoenix-kafka
+    env: docker
+    dockerfilePath: ./kafka/Dockerfile
+    dockerContext: ./kafka
+    plan: free
+    envVars:
+      - key: KAFKA_BOOTSTRAP_SERVERS
+        value: "localhost:9092"
+      - key: KAFKA_TOPIC
+        value: "phoenix-transactions"
+      - key: KAFKA_GROUP_ID
+        value: "phoenix-scoring-group"
 
   # PostgreSQL Database
   databases:
