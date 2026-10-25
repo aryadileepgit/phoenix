@@ -12,7 +12,6 @@ interface AppShellProps {
     systemStatus?: "online" | "warning" | "error";
     systemStatusLabel?: string;
     modelVersion?: string;
-    notificationsCount?: number;
     userName?: string;
     userRole?: string;
   };
@@ -34,7 +33,6 @@ export function AppShell({
           systemStatus={topbar?.systemStatus}
           systemStatusLabel={topbar?.systemStatusLabel}
           modelVersion={topbar?.modelVersion}
-          notificationsCount={topbar?.notificationsCount}
           userName={topbar?.userName}
           userRole={topbar?.userRole}
         />

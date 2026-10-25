@@ -248,7 +248,6 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         systemStatus: "online",
         systemStatusLabel: "Phoenix Engine Online",
         modelVersion: model ? model.name : "No model",
-        notificationsCount: kpis.verificationRequired,
       }}
     >
       <motion.div
