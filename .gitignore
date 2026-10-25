@@ -54,8 +54,12 @@ backend/storage/models/*
 # Ignore everything inside the active model directory by default
 backend/storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b/*
 
-# Include only the model required for deployment
+# Include model artifacts required for deployment
 !backend/storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b/phoenix_xgboost_model.joblib
+!backend/storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b/model_metadata.json
+!backend/storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b/model_features.json
+!backend/storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b/feature_medians.json
+!backend/storage/seed_data.json
 
 # Ignore other generated ML artifacts
 backend/storage/graphs/

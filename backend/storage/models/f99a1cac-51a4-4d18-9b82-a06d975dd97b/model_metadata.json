@@ -1,0 +1,18 @@
+{
+    "dataset_id": "f99a1cac-51a4-4d18-9b82-a06d975dd97b",
+    "model_name": "Phoenix XGBoost Fraud Detector",
+    "algorithm": "XGBoost",
+    "training_rows": 683853,
+    "testing_rows": 118108,
+    "features": 231,
+    "n_estimators": 300,
+    "max_depth": 6,
+    "learning_rate": 0.08,
+    "subsample": 0.85,
+    "colsample_bytree": 0.85,
+    "accuracy": 0.9786381955498358,
+    "precision": 0.8870192307692307,
+    "recall": 0.4464069683038955,
+    "f1_score": 0.5939159826170932,
+    "roc_auc": 0.9279839003071114
+}

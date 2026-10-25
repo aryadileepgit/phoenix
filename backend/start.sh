@@ -52,6 +52,10 @@ print('Tables created successfully')
 echo "Seeding admin user..."
 python seed_admin.py
 
+# Seed production baseline data if empty
+echo "Seeding production baseline data..."
+python seed_production_data.py
+
 # Start the application
 echo "Starting FastAPI server..."
 PORT="${PORT:-10000}"

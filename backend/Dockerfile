@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY kafka_consumer.py .
 COPY seed_admin.py .
+COPY seed_production_data.py .
 
 # Copy startup script
 COPY start.sh .
