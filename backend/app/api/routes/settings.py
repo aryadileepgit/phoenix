@@ -168,3 +168,16 @@ def update_drift_settings(payload: DriftSettingsUpdate):
             ],
         },
     }
+
+
+@router.post("/seed-database")
+def trigger_seed_database(db: Session = Depends(get_db)):
+    try:
+        from seed_production_data import seed_production
+        success = seed_production()
+        return {
+            "status": "success" if success else "failed",
+            "message": "Production seed operation finished."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

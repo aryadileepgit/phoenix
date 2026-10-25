@@ -17,6 +17,13 @@ from app.api.routes.transactions import router as transactions_router
 Base.metadata.create_all(bind=engine)
 run_startup_migrations(engine)
 
+try:
+    from seed_production_data import seed_production
+    seed_production()
+except Exception as _seed_err:
+    import logging
+    logging.getLogger("phoenix").warning(f"Startup seed notice: {_seed_err}")
+
 app = FastAPI(
     title="Phoenix API",
     version="1.0.0",
