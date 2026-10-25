@@ -1,42 +1,42 @@
 {
     "ACC_10001": {
-        "transaction_count": 419,
-        "total_amount": 2081216.92,
-        "average_amount": 4967.13,
+        "transaction_count": 1050,
+        "total_amount": 12962050.46,
+        "average_amount": 12344.85,
         "usual_city": "Kochi",
         "usual_device": "DEV_1001",
-        "last_transaction_time": "2026-10-02T10:48:28.708299+00:00"
+        "last_transaction_time": "2026-10-24T08:42:33.902843+00:00"
     },
     "ACC_10002": {
-        "transaction_count": 455,
-        "total_amount": 47082178.4,
-        "average_amount": 103477.27,
+        "transaction_count": 1064,
+        "total_amount": 224473489.08,
+        "average_amount": 210971.25,
         "usual_city": "Kottayam",
         "usual_device": "DEV_1002",
-        "last_transaction_time": "2026-10-02T10:48:08.593192+00:00"
+        "last_transaction_time": "2026-10-24T08:42:48.992255+00:00"
     },
     "ACC_10003": {
-        "transaction_count": 487,
-        "total_amount": 41196280.95,
-        "average_amount": 84591.93,
+        "transaction_count": 1049,
+        "total_amount": 189706872.83,
+        "average_amount": 180845.38,
         "usual_city": "Kozhikode",
         "usual_device": "DEV_1003",
-        "last_transaction_time": "2026-10-02T10:48:38.760896+00:00"
+        "last_transaction_time": "2026-10-24T08:43:09.194183+00:00"
     },
     "ACC_10004": {
-        "transaction_count": 446,
-        "total_amount": 4239357.11,
-        "average_amount": 9505.29,
+        "transaction_count": 1065,
+        "total_amount": 17896604.83,
+        "average_amount": 16804.33,
         "usual_city": "Thrissur",
         "usual_device": "DEV_1004",
-        "last_transaction_time": "2026-10-02T10:48:23.680355+00:00"
+        "last_transaction_time": "2026-10-24T08:42:54.018250+00:00"
     },
     "ACC_10005": {
-        "transaction_count": 453,
-        "total_amount": 66790529.83,
-        "average_amount": 147440.51,
+        "transaction_count": 1080,
+        "total_amount": 345989434.99,
+        "average_amount": 320360.5,
         "usual_city": "Thiruvananthapuram",
         "usual_device": "DEV_1005",
-        "last_transaction_time": "2026-10-02T10:48:43.781269+00:00"
+        "last_transaction_time": "2026-10-24T08:42:43.959213+00:00"
     }
 }

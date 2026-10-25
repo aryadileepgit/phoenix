@@ -475,9 +475,26 @@ def send_transaction(transaction):
                     "to direct HTTP scoring."
                 )
 
+        headers = {}
+        admin_email = os.getenv("PHOENIX_ADMIN_EMAIL", "ayoradileep@gmail.com")
+        admin_password = os.getenv("PHOENIX_ADMIN_PASSWORD", "admin123")
+        try:
+            auth_res = requests.post(
+                f"{API_URL}/auth/login",
+                json={"email": admin_email, "password": admin_password},
+                timeout=10,
+            )
+            if auth_res.status_code == 200:
+                token = auth_res.json().get("access_token")
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
+        except Exception:
+            pass
+
         response = requests.post(
             TRANSACTION_SCORE_ENDPOINT,
             json=transaction,
+            headers=headers,
             timeout=30,
         )
 
