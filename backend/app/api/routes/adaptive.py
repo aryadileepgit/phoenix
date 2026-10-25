@@ -52,33 +52,66 @@ class DecideRequest(BaseModel):
 
 @router.get("/state")
 def get_state(db: Session = Depends(get_db)):
-    latest_event = (
-        db.query(DriftEvent)
-        .order_by(desc(DriftEvent.detected_at))
-        .first()
-    )
+    try:
+        latest_event = (
+            db.query(DriftEvent)
+            .order_by(desc(DriftEvent.detected_at))
+            .first()
+        )
+    except Exception:
+        latest_event = None
 
-    q_rows = (
-        db.query(QLearningState)
-        .order_by(desc(QLearningState.created_at))
-        .limit(50)
-        .all()
-    )
+    try:
+        q_rows = (
+            db.query(QLearningState)
+            .order_by(desc(QLearningState.created_at))
+            .limit(50)
+            .all()
+        )
+    except Exception:
+        q_rows = []
 
     last_decision = q_rows[0] if q_rows else None
 
-    history = (
-        db.query(RetrainingHistory)
-        .order_by(desc(RetrainingHistory.completed_at))
-        .limit(20)
-        .all()
-    )
+    try:
+        history = (
+            db.query(RetrainingHistory)
+            .order_by(desc(RetrainingHistory.completed_at))
+            .limit(20)
+            .all()
+        )
+    except Exception:
+        history = []
 
-    model_report = (
-        db.query(ModelReport)
-        .order_by(desc(ModelReport.created_at))
-        .first()
-    )
+    try:
+        model_report = (
+            db.query(ModelReport)
+            .order_by(desc(ModelReport.created_at))
+            .first()
+        )
+    except Exception:
+        model_report = None
+
+    try:
+        worker_job = get_active_job(db)
+    except Exception:
+        worker_job = None
+
+    try:
+        recent_jobs = list_recent_jobs(db)
+    except Exception:
+        recent_jobs = []
+
+    try:
+        label_stats = _label_stats(db)
+    except Exception:
+        label_stats = {
+            "labeled_total": 0,
+            "confirmed_fraud": 0,
+            "confirmed_legitimate": 0,
+            "min_required": 50,
+            "eligible": False,
+        }
 
     return {
         "agent": {
@@ -145,9 +178,9 @@ def get_state(db: Session = Depends(get_db)):
             if model_report
             else None
         ),
-        "worker": get_active_job(db),
-        "recent_jobs": list_recent_jobs(db),
-        "label_stats": _label_stats(db),
+        "worker": worker_job,
+        "recent_jobs": recent_jobs,
+        "label_stats": label_stats,
     }
 
 

@@ -37,6 +37,10 @@ REFERENCE_TRAIN_FILE = Path(
     "storage/preprocessed/ieee_cis_train_preprocessed.csv"
 )
 
+FALLBACK_REFERENCE_FILE = Path(
+    "storage/drift_reference.json"
+)
+
 MODEL_METADATA_PATH = Path(
     "storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b"
     "/model_metadata.json"
@@ -67,6 +71,11 @@ def get_reference_distribution():
     """
 
     if not REFERENCE_TRAIN_FILE.exists():
+        if FALLBACK_REFERENCE_FILE.exists():
+            try:
+                return json.loads(FALLBACK_REFERENCE_FILE.read_text(encoding="utf-8"))
+            except Exception:
+                pass
         raise HTTPException(
             status_code=404,
             detail=(

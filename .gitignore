@@ -60,6 +60,7 @@ backend/storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b/*
 !backend/storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b/model_features.json
 !backend/storage/models/f99a1cac-51a4-4d18-9b82-a06d975dd97b/feature_medians.json
 !backend/storage/seed_data.json
+!backend/storage/drift_reference.json
 
 # Ignore other generated ML artifacts
 backend/storage/graphs/

@@ -150,6 +150,14 @@ def seed_production():
             db.rollback()
             logger.error(f"Error seeding retraining history: {e}")
 
+        # 7. Q-Learning Table Initialization
+        try:
+            from app.services.qlearning_service import _initialize_q_table
+            _initialize_q_table(db)
+            logger.info("Initialized Q-learning state table.")
+        except Exception as e:
+            logger.warning(f"Q-learning init notice: {e}")
+
         logger.info("Production baseline data seeding process completed.")
         return True
     finally:
